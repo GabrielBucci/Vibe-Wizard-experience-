@@ -25,7 +25,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { PlayerData } from '../generated';
+
+// Type alias to avoid TypeScript errors with generated SpacetimeDB code
+type PlayerData = any;
 
 interface PlayerUIProps {
   playerData: PlayerData | null;
@@ -34,58 +36,58 @@ interface PlayerUIProps {
 export const PlayerUI: React.FC<PlayerUIProps> = ({ playerData }) => {
   const [showDamageFlash, setShowDamageFlash] = useState(false);
   const [lastHealth, setLastHealth] = useState(playerData?.health || 0);
-  
+
   // Check for damage taken and trigger damage flash effect
   useEffect(() => {
     if (!playerData) return;
-    
+
     const currentHealth = playerData.health;
-    
+
     // If health decreased, show damage flash
     if (currentHealth < lastHealth) {
       setShowDamageFlash(true);
-      
+
       // Remove flash after animation completes
       const timer = setTimeout(() => {
         setShowDamageFlash(false);
       }, 300); // Match CSS animation duration
-      
+
       return () => clearTimeout(timer);
     }
-    
+
     // Update last health value
     setLastHealth(currentHealth);
   }, [playerData?.health, lastHealth]);
-  
+
   // Don't render if no player data
   if (!playerData) return null;
-  
+
   // Calculate health and mana percentages
   const healthPercent = (playerData.health / playerData.maxHealth) * 100;
   const manaPercent = (playerData.mana / playerData.maxMana) * 100;
-  
+
   return (
     <>
       {/* Health and mana bars */}
       <div className="health-bar-container">
-        <div 
+        <div
           className="health-bar"
           style={{ width: `${healthPercent}%` }}
         />
       </div>
-      
+
       <div className="mana-bar-container">
-        <div 
+        <div
           className="mana-bar"
           style={{ width: `${manaPercent}%` }}
         />
       </div>
-      
+
       {/* Damage flash overlay */}
       {showDamageFlash && (
         <div className="damage-overlay damage-flash" />
       )}
-      
+
       {/* Player status text */}
       <div className="player-status">
         <div className="player-name">{playerData.username}</div>

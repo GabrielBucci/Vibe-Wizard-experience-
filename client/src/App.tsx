@@ -371,10 +371,15 @@ function App() {
       return;
     }
 
-    const dbHost = "localhost:3000";
-    const dbName = "vibe-multiplayer";
+    // Get connection config from environment variables with fallbacks for local dev
+    const dbHost = import.meta.env.VITE_SPACETIME_HOST || "localhost:3000";
+    const dbName = import.meta.env.VITE_SPACETIME_MODULE_NAME || "vibe-multiplayer";
 
-    console.log(`Connecting to SpacetimeDB at ${dbHost}, database: ${dbName}...`);
+    // Determine protocol based on host (https for production, ws for local)
+    const protocol = dbHost.includes('maincloud.spacetimedb.com') ? 'https' : 'ws';
+    const wsUrl = `${protocol}://${dbHost}`;
+
+    console.log(`Connecting to SpacetimeDB at ${wsUrl}, database: ${dbName}...`);
 
     const onConnect = (connection: DbConnection, id: Identity, _token: string) => {
       console.log("Connected!");
@@ -401,7 +406,7 @@ function App() {
     };
 
     moduleBindings.DbConnection.builder()
-      .withUri(`ws://${dbHost}`)
+      .withUri(wsUrl)
       .withModuleName(dbName)
       .onConnect(onConnect)
       .onDisconnect(onDisconnect)

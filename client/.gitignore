@@ -12,8 +12,9 @@ dist
 dist-ssr
 *.local
 
-# Generated files
-src/generated/
+# Generated files - COMMENTED OUT for Vercel deployment
+# SpacetimeDB generate doesn't support remote databases, so we commit generated files
+# src/generated/
 
 # Editor directories and files
 .vscode/*
