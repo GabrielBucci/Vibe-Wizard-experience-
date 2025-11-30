@@ -173,6 +173,12 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   const jumpAnimationPlayedRef = useRef(false); // Track if jump animation has played for current jump
   const wasGroundedRef = useRef(true); // Track previous grounded state
 
+  // --- Diagnostic Logging Refs ---
+  const frameCounter = useRef(0);
+  const lastLogTime = useRef(performance.now());
+  const reconciliationCount = useRef(0);
+  const totalReconciliationError = useRef(0);
+
   // --- Remote Player Interpolation Buffer ---
   const remotePositionBuffer = useRef<Array<{ pos: THREE.Vector3, timestamp: number }>>([]);
   const remoteTargetPosition = useRef<THREE.Vector3>(new THREE.Vector3());
@@ -750,6 +756,29 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   useEffect(() => {
     if (!isLocalPlayer) return;
 
+    // --- DIAGNOSTIC: Track server update frequency ---
+    const lastServerUpdate = useRef(performance.now());
+    const serverUpdateCount = useRef(0);
+    const lastServerPos = useRef(new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z));
+
+    const checkServerUpdate = () => {
+      const currentServerPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
+      if (!currentServerPos.equals(lastServerPos.current)) {
+        const now = performance.now();
+        const timeSinceLastUpdate = now - lastServerUpdate.current;
+        serverUpdateCount.current++;
+
+        if (serverUpdateCount.current % 30 === 0) { // Log every 30 updates
+          console.log(`[SERVER UPDATES] Received ${serverUpdateCount.current} updates | Last update: ${timeSinceLastUpdate.toFixed(0)}ms ago | Update rate: ${(1000 / timeSinceLastUpdate).toFixed(1)}Hz`);
+        }
+
+        lastServerUpdate.current = now;
+        lastServerPos.current.copy(currentServerPos);
+      }
+    };
+
+    checkServerUpdate();
+
     const handlePointerLockChange = () => {
       isPointerLocked.current = document.pointerLockElement === document.body;
       // Add cursor style changes to match legacy implementation
@@ -948,13 +977,41 @@ const PlayerComponent: React.FC<PlayerProps> = ({
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
       const distError = localPositionRef.current.distanceTo(serverPos);
 
+      // --- DIAGNOSTIC LOGGING ---
+      frameCounter.current++;
+      const now = performance.now();
+      if (now - lastLogTime.current > 1000) { // Log every second
+        const fps = frameCounter.current;
+        const avgReconciliationError = reconciliationCount.current > 0
+          ? (totalReconciliationError.current / reconciliationCount.current).toFixed(3)
+          : '0.000';
+
+        console.log(`[MOVEMENT DIAGNOSTICS] FPS: ${fps} | Reconciliations: ${reconciliationCount.current} | Avg Error: ${avgReconciliationError}m | Current Error: ${distError.toFixed(3)}m | Frame Delta: ${(dt * 1000).toFixed(1)}ms`);
+
+        // Reset counters
+        frameCounter.current = 0;
+        reconciliationCount.current = 0;
+        totalReconciliationError.current = 0;
+        lastLogTime.current = now;
+      }
+
+      // Track reconciliation stats
+      if (distError > 0.01) {
+        reconciliationCount.current++;
+        totalReconciliationError.current += distError;
+      }
+
       if (distError > 1.0) {
         // Huge error (> 1 meter): snap immediately (likely teleport or major desync)
+        console.warn(`[RECONCILIATION] SNAP! Error: ${distError.toFixed(3)}m - Teleporting to server position`);
         localPositionRef.current.copy(serverPos);
       } else if (distError > POSITION_RECONCILE_THRESHOLD) {
         // Large error: aggressive correction with adaptive speed
         // Faster correction for larger errors (0.15 to 0.3 lerp factor)
         const lerpFactor = Math.min(0.3, 0.15 + distError * 0.3);
+        if (distError > 0.5) {
+          console.warn(`[RECONCILIATION] Large error: ${distError.toFixed(3)}m - Lerp factor: ${lerpFactor.toFixed(3)}`);
+        }
         localPositionRef.current.lerp(serverPos, lerpFactor);
       } else {
         // Small error: gentle smoothing to avoid visible pop

@@ -245,9 +245,9 @@ function App() {
       // Fortnite-style: Send yaw only
       const yawToSend = playerRotationRef.current.y ?? 0;
 
-      // Debug logging
-      if (safeInputState.sequence % 60 === 0) { // Log every second
-        console.log("Sending input", safeInputState, "yaw", yawToSend.toFixed(3), "seq", safeInputState.sequence);
+      // Debug logging - log every 30 inputs (once per second at 30Hz)
+      if (safeInputState.sequence % 30 === 0) {
+        console.log(`[INPUT SEND] Seq: ${safeInputState.sequence} | Yaw: ${yawToSend.toFixed(3)} | Anim: ${currentAnimation} | Changed: ${changed}`);
       }
 
       conn.reducers.updatePlayerInput({
