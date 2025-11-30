@@ -339,13 +339,13 @@ function App() {
     console.log("Delegated listener removed from body.");
   }, [handleDelegatedClick]);
 
-  // --- Game Loop Effect (60Hz Input Sending) ---
+  // --- Game Loop Effect (30Hz Input Sending) ---
   useEffect(() => {
     if (!connected || !conn || !identity) return;
 
-    console.log("[CLIENT] Starting 60Hz input sender.");
+    console.log("[CLIENT] Starting 30Hz input sender.");
 
-    const SEND_TICK_MS = 1000 / 60; // 60Hz
+    const SEND_TICK_MS = 1000 / 30; // 30Hz (reduced from 60Hz for network optimization)
     const intervalId = setInterval(() => {
       if (!conn || !identity || !connected) return;
 
