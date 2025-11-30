@@ -107,7 +107,7 @@ interface PlayerProps {
   isDebugPanelVisible?: boolean; // Prop to control general debug helpers visibility
 }
 
-export const Player: React.FC<PlayerProps> = ({
+const PlayerComponent: React.FC<PlayerProps> = ({
   playerData,
   isLocalPlayer,
   onRotationChange,
@@ -173,6 +173,10 @@ export const Player: React.FC<PlayerProps> = ({
   const jumpAnimationPlayedRef = useRef(false); // Track if jump animation has played for current jump
   const wasGroundedRef = useRef(true); // Track previous grounded state
 
+  // --- Remote Player Interpolation Buffer ---
+  const remotePositionBuffer = useRef<Array<{ pos: THREE.Vector3, timestamp: number }>>([]);
+  const remoteTargetPosition = useRef<THREE.Vector3>(new THREE.Vector3());
+  const remoteTargetRotation = useRef<number>(0);
 
   // --- Client-Side Movement Calculation ---
   const calculateClientMovement = useCallback((currentPos: THREE.Vector3, currentRot: THREE.Euler, inputState: any, delta: number): THREE.Vector3 => {
@@ -927,25 +931,34 @@ export const Player: React.FC<PlayerProps> = ({
 
     // LOCAL player prediction
     if (isLocalPlayer && currentInput) {
-      // Calculate predicted position based on current input using FRAME DELTA
+      // Use FIXED delta matching server (1/60s) for prediction accuracy
+      // This eliminates prediction drift caused by variable frame times
+      const FIXED_DELTA = 1 / 60;
+
+      // Calculate predicted position based on current input using FIXED DELTA
       const predictedPosition = calculateClientMovement(
         localPositionRef.current,
         localRotationRef.current,
         currentInput,
-        dt // Use actual frame delta, not fixed SERVER_TICK_DELTA
+        FIXED_DELTA // ← Fixed delta matching server (not frame delta)
       );
       localPositionRef.current.copy(predictedPosition);
 
-      // RECONCILIATION: only position (server authoritative)
+      // RECONCILIATION: adaptive lerp based on error magnitude
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
       const distError = localPositionRef.current.distanceTo(serverPos);
 
-      if (distError > POSITION_RECONCILE_THRESHOLD) {
-        // big error: lerp more aggressively to server position but keep some smoothing
-        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR);
+      if (distError > 1.0) {
+        // Huge error (> 1 meter): snap immediately (likely teleport or major desync)
+        localPositionRef.current.copy(serverPos);
+      } else if (distError > POSITION_RECONCILE_THRESHOLD) {
+        // Large error: aggressive correction with adaptive speed
+        // Faster correction for larger errors (0.15 to 0.3 lerp factor)
+        const lerpFactor = Math.min(0.3, 0.15 + distError * 0.3);
+        localPositionRef.current.lerp(serverPos, lerpFactor);
       } else {
-        // small error: gentle smoothing to avoid pop
-        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR * 0.5);
+        // Small error: gentle smoothing to avoid visible pop
+        localPositionRef.current.lerp(serverPos, 0.05);
       }
 
       // Apply position and rotation to the model group
@@ -962,13 +975,60 @@ export const Player: React.FC<PlayerProps> = ({
         playAnimation(predictedAnim, 0.2);
       }
     } else {
-      // REMOTE player interpolation (server snapshots)
+      // REMOTE player interpolation with buffering (eliminates jitter)
       const serverPosition = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
-      group.current.position.lerp(serverPosition, Math.min(1, dt * 10));
+      const now = performance.now();
 
-      // rotation from server
+      // Add new server snapshot to buffer if position changed
+      if (remotePositionBuffer.current.length === 0 ||
+        serverPosition.distanceTo(remotePositionBuffer.current[remotePositionBuffer.current.length - 1].pos) > 0.001) {
+        remotePositionBuffer.current.push({
+          pos: serverPosition.clone(),
+          timestamp: now
+        });
+
+        // Keep buffer size reasonable (last 10 snapshots = ~500ms of history)
+        if (remotePositionBuffer.current.length > 10) {
+          remotePositionBuffer.current.shift();
+        }
+      }
+
+      // Interpolate between buffered positions (render 100ms in the past for smoothness)
+      const renderTime = now - 100;
+
+      if (remotePositionBuffer.current.length >= 2) {
+        // Find the two snapshots to interpolate between
+        let i = 0;
+        while (i < remotePositionBuffer.current.length - 1 &&
+          remotePositionBuffer.current[i + 1].timestamp <= renderTime) {
+          i++;
+        }
+
+        if (i < remotePositionBuffer.current.length - 1) {
+          const snap0 = remotePositionBuffer.current[i];
+          const snap1 = remotePositionBuffer.current[i + 1];
+          const t = (renderTime - snap0.timestamp) / (snap1.timestamp - snap0.timestamp);
+
+          // Interpolate between the two snapshots
+          remoteTargetPosition.current.lerpVectors(snap0.pos, snap1.pos, Math.min(1, Math.max(0, t)));
+        } else {
+          // Use most recent snapshot if we're ahead of buffer
+          remoteTargetPosition.current.copy(remotePositionBuffer.current[remotePositionBuffer.current.length - 1].pos);
+        }
+      } else if (remotePositionBuffer.current.length === 1) {
+        // Only one snapshot, use it directly
+        remoteTargetPosition.current.copy(remotePositionBuffer.current[0].pos);
+      } else {
+        // No buffer yet, use server position directly
+        remoteTargetPosition.current.copy(serverPosition);
+      }
+
+      // Smooth movement to interpolated target position
+      group.current.position.lerp(remoteTargetPosition.current, Math.min(1, dt * 15));
+
+      // Rotation from server (smooth)
       const targetRotation = new THREE.Euler(0, playerData.rotation.y, 0, 'YXZ');
-      group.current.quaternion.slerp(new THREE.Quaternion().setFromEuler(targetRotation), Math.min(1, dt * 8));
+      group.current.quaternion.slerp(new THREE.Quaternion().setFromEuler(targetRotation), Math.min(1, dt * 10));
     }
 
     // Update camera based on mode with proper third-person positioning
@@ -1095,3 +1155,25 @@ export const Player: React.FC<PlayerProps> = ({
     </group>
   );
 };
+
+// Export memoized version to prevent unnecessary re-renders
+export const Player = React.memo(PlayerComponent, (prevProps, nextProps) => {
+  // Only re-render if player data actually changed
+  const prevData = prevProps.playerData;
+  const nextData = nextProps.playerData;
+
+  // For local player, always re-render (needs to respond to input immediately)
+  if (nextProps.isLocalPlayer) {
+    return false; // Always re-render local player
+  }
+
+  // For remote players, only re-render if position, rotation, or animation changed
+  return (
+    prevData.position.x === nextData.position.x &&
+    prevData.position.y === nextData.position.y &&
+    prevData.position.z === nextData.position.z &&
+    prevData.rotation.y === nextData.rotation.y &&
+    prevData.currentAnimation === nextData.currentAnimation &&
+    prevProps.isDebugPanelVisible === nextProps.isDebugPanelVisible
+  );
+});

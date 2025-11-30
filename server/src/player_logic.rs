@@ -132,6 +132,9 @@ pub fn update_input_state(player: &mut PlayerData, input: InputState, client_ani
     // Previous jump input (for rising edge detection)
     let prev_jump = player.input.jump;
 
+    // Store old position for comparison (rate limiting)
+    let old_position = player.position.clone();
+
     // Compute new authoritative position
     let new_position = calculate_new_position(
         player,
@@ -141,8 +144,18 @@ pub fn update_input_state(player: &mut PlayerData, input: InputState, client_ani
         prev_jump
     );
 
-    // Persist authoritative results
-    player.position = new_position;
+    // Calculate position delta for rate limiting
+    let position_delta = ((new_position.x - old_position.x).powi(2) + 
+                          (new_position.y - old_position.y).powi(2) + 
+                          (new_position.z - old_position.z).powi(2)).sqrt();
+
+    // Only update position if it changed significantly (> 0.01 units) or every 10th frame
+    // This reduces DB updates from 60/sec to ~10-20/sec when moving, ~6/sec when idle
+    if position_delta > 0.01 || input.sequence % 10 == 0 {
+        player.position = new_position;
+    }
+
+    // Always update these (they don't trigger expensive DB broadcasts on their own)
     player.current_animation = client_animation;
     player.input = input.clone();
     player.last_input_seq = input.sequence;
