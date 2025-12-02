@@ -108,7 +108,9 @@ function App() {
       if (identity && newPlayer.identity.toHexString() === identity.toHexString()) {
         setLocalPlayer(newPlayer);
 
-        // RTT Calculation
+        // RTT Calculation Debugging
+        // console.log(`[RTT DEBUG] Update received. Seq: ${newPlayer.lastInputSeq}, Pending: ${inputTimestampsRef.current.size}`);
+
         if (newPlayer.lastInputSeq) {
           const sentTime = inputTimestampsRef.current.get(newPlayer.lastInputSeq);
           if (sentTime) {
@@ -130,7 +132,13 @@ function App() {
               const oldestSeq = newPlayer.lastInputSeq - 100;
               inputTimestampsRef.current.delete(oldestSeq);
             }
+          } else {
+            // Log if we received a sequence we aren't waiting for (or already processed)
+            console.warn(`[RTT DEBUG] Received seq ${newPlayer.lastInputSeq} but no timestamp found!`);
           }
+        } else {
+          // Log if lastInputSeq is missing or 0
+          console.warn(`[RTT DEBUG] newPlayer.lastInputSeq is missing or 0:`, newPlayer.lastInputSeq);
         }
       }
     });
