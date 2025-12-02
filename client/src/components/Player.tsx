@@ -998,14 +998,27 @@ const PlayerComponent: React.FC<PlayerProps> = ({
 
       // RECONCILIATION: only position (server authoritative)
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
-      const distError = localPositionRef.current.distanceTo(serverPos);
 
-      if (distError > POSITION_RECONCILE_THRESHOLD) {
-        // big error: lerp more aggressively to server position but keep some smoothing
-        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR);
+      // Check if server data is fresh enough to reconcile against
+      const timeSinceLastUpdate = performance.now() - lastServerUpdate.current;
+      const isServerDataFresh = timeSinceLastUpdate < 500; // 500ms threshold
+
+      if (isServerDataFresh) {
+        const distError = localPositionRef.current.distanceTo(serverPos);
+
+        if (distError > POSITION_RECONCILE_THRESHOLD) {
+          // big error: lerp more aggressively to server position but keep some smoothing
+          localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR);
+        } else {
+          // small error: gentle smoothing to avoid pop
+          localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR * 0.5);
+        }
       } else {
-        // small error: gentle smoothing to avoid pop
-        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR * 0.5);
+        // Server data is stale - trust client prediction completely
+        // This prevents snapping back to old positions during lag spikes
+        if (frameCounter.current % 60 === 0) {
+          // console.warn(`[Reconciliation] Skipping due to stale data (${timeSinceLastUpdate.toFixed(0)}ms old)`);
+        }
       }
 
       // Apply position and rotation to the model group

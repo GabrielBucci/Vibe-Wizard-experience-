@@ -110,6 +110,7 @@ function App() {
 
         // RTT Calculation Debugging
         // console.log(`[RTT DEBUG] Update received. Seq: ${newPlayer.lastInputSeq}, Pending: ${inputTimestampsRef.current.size}`);
+        // console.log("[RTT DEBUG] Full Player Object:", JSON.stringify(newPlayer)); // Log full object to check fields
 
         if (newPlayer.lastInputSeq) {
           const sentTime = inputTimestampsRef.current.get(newPlayer.lastInputSeq);
