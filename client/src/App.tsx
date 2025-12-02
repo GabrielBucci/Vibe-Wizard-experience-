@@ -115,8 +115,9 @@ function App() {
             const rtt = performance.now() - sentTime;
 
             // Store RTT for stats
-            if (!window.rttSamples) window.rttSamples = [];
-            window.rttSamples.push(rtt);
+            const win = window as any;
+            if (!win.rttSamples) win.rttSamples = [];
+            win.rttSamples.push(rtt);
 
             // Log high latency immediately
             if (rtt > 200) {
@@ -275,12 +276,13 @@ function App() {
       // Debug logging & RTT Stats
       if (safeInputState.sequence % 60 === 0) { // Log every second
         let rttStats = "RTT: Waiting...";
-        if (window.rttSamples && window.rttSamples.length > 0) {
-          const avg = window.rttSamples.reduce((a, b) => a + b, 0) / window.rttSamples.length;
-          const max = Math.max(...window.rttSamples);
-          const min = Math.min(...window.rttSamples);
+        const win = window as any;
+        if (win.rttSamples && win.rttSamples.length > 0) {
+          const avg = win.rttSamples.reduce((a: number, b: number) => a + b, 0) / win.rttSamples.length;
+          const max = Math.max(...win.rttSamples);
+          const min = Math.min(...win.rttSamples);
           rttStats = `RTT Avg: ${avg.toFixed(0)}ms | Min: ${min.toFixed(0)}ms | Max: ${max.toFixed(0)}ms`;
-          window.rttSamples = []; // Reset samples
+          win.rttSamples = []; // Reset samples
         }
         console.log(`[NET STATS] Seq: ${safeInputState.sequence} | ${rttStats}`);
       }
