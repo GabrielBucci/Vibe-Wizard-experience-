@@ -1,0 +1,13 @@
+import React from 'react';
+
+interface PlayerUIProps {
+  // Add any props needed for the UI
+}
+
+export const PlayerUI: React.FC<PlayerUIProps> = () => {
+  return (
+    <div className="player-ui">
+      {/* Add UI elements here */}
+    </div>
+  );
+}; 

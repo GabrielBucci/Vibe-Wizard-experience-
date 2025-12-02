@@ -65,9 +65,9 @@ const JUMP_FORCE = 9.0;
 // --- Client-side Prediction Constants ---
 const SERVER_TICK_RATE = 60; // Assuming server runs at 60Hz
 const SERVER_TICK_DELTA = 1 / SERVER_TICK_RATE; // Use this for prediction
-const POSITION_RECONCILE_THRESHOLD = 0.3; // meters - tighter threshold for better sync
+const POSITION_RECONCILE_THRESHOLD = 1.5; // Increased to 1.5m to prevent "drag" from Vercel latency
 const ROTATION_RECONCILE_THRESHOLD = 0.1; // Radians
-const RECONCILE_LERP_FACTOR = 0.15; // Gentler reconciliation to reduce visual snapping
+const RECONCILE_LERP_FACTOR = 0.18; // Match Backup 5 // Gentler reconciliation to reduce visual snapping
 
 // --- Camera Constants ---
 const CAMERA_MODES = {
@@ -191,6 +191,11 @@ const PlayerComponent: React.FC<PlayerProps> = ({
 
   // --- Client-Side Movement Calculation ---
   const calculateClientMovement = useCallback((currentPos: THREE.Vector3, currentRot: THREE.Euler, inputState: any, delta: number): THREE.Vector3 => {
+    // Define constants here to ensure they're always current
+    const PLAYER_SPEED = 100.0;
+    const SPRINT_MULTIPLIER = 1.8;
+    console.log(`[Client Movement] Player Speed: ${PLAYER_SPEED}`); // Debug log
+
     // Skip if no horizontal movement input
     const hasInput = inputState.forward || inputState.backward || inputState.left || inputState.right;
     if (!hasInput) {
@@ -952,56 +957,17 @@ const PlayerComponent: React.FC<PlayerProps> = ({
       );
       localPositionRef.current.copy(predictedPosition);
 
-      // RECONCILIATION: adaptive lerp based on error magnitude
+      // RECONCILIATION: only position (server authoritative)
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
+      const distError = localPositionRef.current.distanceTo(serverPos);
 
-      // Always sync Y from server (we don't predict vertical movement)
-      localPositionRef.current.y = serverPos.y;
-
-      // Only reconcile horizontal position (X/Z)
-      const localPosXZ = new THREE.Vector2(localPositionRef.current.x, localPositionRef.current.z);
-      const serverPosXZ = new THREE.Vector2(serverPos.x, serverPos.z);
-      const distError = localPosXZ.distanceTo(serverPosXZ);
-
-      // --- DIAGNOSTIC LOGGING ---
-      frameCounter.current++;
-      const now = performance.now();
-      if (now - lastLogTime.current > 1000) { // Log every second
-        const fps = frameCounter.current;
-        const avgReconciliationError = reconciliationCount.current > 0
-          ? (totalReconciliationError.current / reconciliationCount.current).toFixed(3)
-          : '0.000';
-
-        console.log(`[MOVEMENT DIAGNOSTICS] FPS: ${fps} | Reconciliations: ${reconciliationCount.current} | Avg Error: ${avgReconciliationError}m | Current Error: ${distError.toFixed(3)}m | Frame Delta: ${(dt * 1000).toFixed(1)}ms`);
-
-        // Reset counters
-        frameCounter.current = 0;
-        reconciliationCount.current = 0;
-        totalReconciliationError.current = 0;
-        lastLogTime.current = now;
+      if (distError > POSITION_RECONCILE_THRESHOLD) {
+        // big error: lerp more aggressively to server position but keep some smoothing
+        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR);
+      } else {
+        // small error: gentle smoothing to avoid pop
+        localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR * 0.5);
       }
-
-      // Track reconciliation stats
-      if (distError > 0.01) {
-        reconciliationCount.current++;
-        totalReconciliationError.current += distError;
-      }
-
-      if (distError > 1.0) {
-        // Huge error (>1 meter): snap immediately (likely teleport or major desync)
-        console.warn(`[RECONCILIATION] SNAP! Error: ${distError.toFixed(3)}m - Teleporting to server position`);
-        localPositionRef.current.x = serverPos.x;
-        localPositionRef.current.z = serverPos.z;
-      } else if (distError > 0.5) {
-        // Large error: smooth correction (only X/Z, Y is already synced)
-        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.15);
-        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.15);
-      } else if (distError > 0.15) {
-        // Small error: very gentle correction to avoid visible stuttering
-        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.08);
-        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.08);
-      }
-      // Dead zone: errors <0.15m are ignored (prediction is accurate enough)
 
       // Apply position and rotation to the model group
       group.current.position.copy(localPositionRef.current);

@@ -1,0 +1,17 @@
+use spacetimedb::{spacetimedb, Identity, Timestamp};
+use crate::common::*;
+use crate::player_logic::*;
+
+// Player table definition
+#[spacetimedb(table)]
+pub struct Player {
+    #[primarykey]
+    pub identity: Identity,
+    pub username: String,
+    pub position: Position,
+    pub rotation: Rotation,
+    pub character_class: String,
+    pub current_animation: String,
+}
+
+// ... rest of the server code ... 

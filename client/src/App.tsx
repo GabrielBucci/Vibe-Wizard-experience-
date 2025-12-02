@@ -339,45 +339,23 @@ function App() {
     console.log("Delegated listener removed from body.");
   }, [handleDelegatedClick]);
 
-  // --- Game Loop Effect (RAF with 30Hz Throttling) ---
+  // --- Game Loop Effect (60Hz Input Sending) ---
   useEffect(() => {
     if (!connected || !conn || !identity) return;
 
-    console.log("[CLIENT] Starting RAF-based game loop with 30Hz input throttling.");
+    console.log("[CLIENT] Starting 60Hz input sender.");
 
-    const SEND_TICK_MS = 1000 / 30; // 30Hz input sending for network efficiency
-    let lastSendTime = 0;
+    const SEND_TICK_MS = 1000 / 60; // 60Hz
+    const intervalId = setInterval(() => {
+      if (!conn || !identity || !connected) return;
 
-    const gameLoop = (currentTime: number) => {
-      if (!connected || !conn || !identity) {
-        if (animationFrameIdRef.current) {
-          cancelAnimationFrame(animationFrameIdRef.current);
-          animationFrameIdRef.current = null;
-        }
-        return;
-      }
-
-      // Throttle input sending to 30Hz while rendering at 60Hz
-      const timeSinceLastSend = currentTime - lastSendTime;
-      if (timeSinceLastSend >= SEND_TICK_MS) {
-        currentInputRef.current.sequence += 1;
-        sendInput(currentInputRef.current);
-        lastSendTime = currentTime;
-      }
-
-      // Continue the loop
-      animationFrameIdRef.current = requestAnimationFrame(gameLoop);
-    };
-
-    // Start the loop
-    animationFrameIdRef.current = requestAnimationFrame(gameLoop);
+      currentInputRef.current.sequence += 1;
+      sendInput(currentInputRef.current);
+    }, SEND_TICK_MS);
 
     return () => {
-      console.log("[CLIENT] Stopping RAF game loop.");
-      if (animationFrameIdRef.current) {
-        cancelAnimationFrame(animationFrameIdRef.current);
-        animationFrameIdRef.current = null;
-      }
+      console.log("[CLIENT] Stopping input sender.");
+      clearInterval(intervalId);
     };
   }, [connected, conn, identity, sendInput]);
 
