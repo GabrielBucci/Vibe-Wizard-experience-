@@ -67,7 +67,7 @@ const SERVER_TICK_RATE = 60; // Assuming server runs at 60Hz
 const SERVER_TICK_DELTA = 1 / SERVER_TICK_RATE; // Use this for prediction
 const POSITION_RECONCILE_THRESHOLD = 0.2; // meters
 const ROTATION_RECONCILE_THRESHOLD = 0.1; // Radians
-const RECONCILE_LERP_FACTOR = 0.18;
+const RECONCILE_LERP_FACTOR = 0.15; // Gentler reconciliation to reduce visual snapping
 
 // --- Camera Constants ---
 const CAMERA_MODES = {
