@@ -79,6 +79,9 @@ function App() {
   const lastSentInputState = useRef<Partial<InputState>>({});
   const animationFrameIdRef = useRef<number | null>(null); // For game loop
 
+  // RTT Tracking
+  const inputTimestampsRef = useRef<Map<number, number>>(new Map());
+
   // New import for handling player rotation data
   const playerRotationRef = useRef<THREE.Euler>(new THREE.Euler(0, 0, 0, 'YXZ'));
 
@@ -104,6 +107,24 @@ function App() {
       });
       if (identity && newPlayer.identity.toHexString() === identity.toHexString()) {
         setLocalPlayer(newPlayer);
+
+        // RTT Calculation
+        if (newPlayer.lastInputSeq) {
+          const sentTime = inputTimestampsRef.current.get(newPlayer.lastInputSeq);
+          if (sentTime) {
+            const rtt = performance.now() - sentTime;
+            if (rtt > 200) {
+              console.warn(`[NETWORK LAG] High RTT: ${rtt.toFixed(0)}ms for seq ${newPlayer.lastInputSeq}`);
+            }
+            // Cleanup old timestamps
+            inputTimestampsRef.current.delete(newPlayer.lastInputSeq);
+            // Also cleanup very old ones to prevent memory leak
+            if (inputTimestampsRef.current.size > 100) {
+              const oldestSeq = newPlayer.lastInputSeq - 100;
+              inputTimestampsRef.current.delete(oldestSeq);
+            }
+          }
+        }
       }
     });
 
@@ -245,10 +266,13 @@ function App() {
       // Fortnite-style: Send yaw only
       const yawToSend = playerRotationRef.current.y ?? 0;
 
-      // Debug logging - log every 30 inputs (once per second at 30Hz)
-      // if (safeInputState.sequence % 30 === 0) {
-      //   console.log(`[INPUT SEND] Seq: ${safeInputState.sequence} | Yaw: ${yawToSend.toFixed(3)} | Anim: ${currentAnimation} | Changed: ${changed}`);
-      // }
+      // Debug logging
+      if (safeInputState.sequence % 60 === 0) { // Log every second
+        console.log("Sending input", safeInputState, "yaw", yawToSend.toFixed(3), "seq", safeInputState.sequence);
+      }
+
+      // Record timestamp for RTT calculation
+      inputTimestampsRef.current.set(safeInputState.sequence, performance.now());
 
       conn.reducers.updatePlayerInput({
         input: safeInputState,
