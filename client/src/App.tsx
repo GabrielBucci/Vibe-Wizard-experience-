@@ -553,6 +553,7 @@ function App() {
     moduleBindings.DbConnection.builder()
       .withUri(wsUrl)
       .withModuleName(dbName)
+      .withToken(null) // Explicitly enable anonymous access
       .onConnect(onConnect)
       .onDisconnect(onDisconnect)
       .build();
