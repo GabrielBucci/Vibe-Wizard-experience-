@@ -302,47 +302,32 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
     // Update Players
     player_logic::update_players_logic(ctx, delta_time as f64);
 
-    // Update Projectiles
+    // --- Projectile Logic ---
     for mut projectile in ctx.db.projectile().iter() {
-        // 1. Move Projectile
-        projectile.position.x += projectile.direction.x * projectile.speed * delta_time;
-        projectile.position.y += projectile.direction.y * projectile.speed * delta_time;
-        projectile.position.z += projectile.direction.z * projectile.speed * delta_time;
-        projectile.lifetime -= delta_time;
+        let pos = projectile.position;
+        let speed = 15.0; // m/s
+        let next_pos = pos + projectile.direction * speed * delta_time;
 
-        // 2. Check Lifetime
-        if projectile.lifetime <= 0.0 {
-            ctx.db.projectile().id().delete(projectile.id);
-            continue;
-        }
-
-        // 3. Check Collision with Players
-        let mut hit_player_identity: Option<Identity> = None;
-        
-        for mut player in ctx.db.player().iter() {
-            // Don't hit yourself
-            if player.identity == projectile.owner_identity {
-                continue;
-            }
-
-            if physics::check_collision(&player.position, &projectile.position) {
-                // HIT!
-                spacetimedb::log::info!("Projectile {} hit player {}!", projectile.id, player.username);
-                
-                hit_player_identity = Some(player.identity);
-
-                // Apply Damage
-                player.health = player.health.saturating_sub(projectile.damage);
-                ctx.db.player().identity().update(player);
-                
-                break; // One hit per projectile (for now)
+        // Collision Detection (Simple distance check against all players)
+        let mut hit = false;
+        for player in ctx.db.player().iter() {
+            if player.identity != projectile.owner_identity {
+                // Check distance
+                let dist = (player.position - next_pos).length();
+                if dist < 1.0 { // Hit radius
+                    hit = true;
+                    spacetimedb::log::info!("Projectile hit player: {}", player.username);
+                    // TODO: Deal damage
+                    break;
+                }
             }
         }
 
-        if hit_player_identity.is_some() {
+        if hit || (pos - projectile.start_position).length() > 50.0 { // Max range 50m
             ctx.db.projectile().id().delete(projectile.id);
         } else {
-            // Persist movement if no hit
+            // Update position
+            projectile.position = next_pos;
             ctx.db.projectile().id().update(projectile);
         }
     }
