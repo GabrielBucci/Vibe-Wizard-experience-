@@ -65,7 +65,7 @@ const JUMP_FORCE = 9.0;
 // --- Client-side Prediction Constants ---
 const SERVER_TICK_RATE = 60; // Assuming server runs at 60Hz
 const SERVER_TICK_DELTA = 1 / SERVER_TICK_RATE; // Use this for prediction
-const POSITION_RECONCILE_THRESHOLD = 0.4; // meters - matches example project
+const POSITION_RECONCILE_THRESHOLD = 0.3; // meters - tighter threshold for better sync
 const ROTATION_RECONCILE_THRESHOLD = 0.1; // Radians
 const RECONCILE_LERP_FACTOR = 0.15; // Gentler reconciliation to reduce visual snapping
 
@@ -191,10 +191,9 @@ const PlayerComponent: React.FC<PlayerProps> = ({
 
   // --- Client-Side Movement Calculation ---
   const calculateClientMovement = useCallback((currentPos: THREE.Vector3, currentRot: THREE.Euler, inputState: any, delta: number): THREE.Vector3 => {
-    // We need to process movement even if no input if we are in the air (gravity)
+    // Skip if no horizontal movement input
     const hasInput = inputState.forward || inputState.backward || inputState.left || inputState.right;
-
-    if (!hasInput && !inputState.jump && currentPos.y <= 0) {
+    if (!hasInput) {
       return currentPos;
     }
 
@@ -220,28 +219,11 @@ const PlayerComponent: React.FC<PlayerProps> = ({
     // Scale by speed and delta time
     worldMoveVector.multiplyScalar(speed * delta);
 
-    // --- Vertical Movement (Jumping/Gravity) ---
-    // Apply gravity
-    verticalVelocity.current += GRAVITY * delta;
-
-    // Jump impulse (Rising Edge Detection)
-    // Only jump if key is pressed, was NOT pressed last frame (or we reset it), and we are on the ground
-    if (inputState.jump && !prevJumpRef.current && currentPos.y <= 0.01) {
-      verticalVelocity.current = JUMP_FORCE;
-    }
-
-    // Update previous jump state
-    prevJumpRef.current = inputState.jump;
-
-    // Apply vertical velocity to position
-    const newPos = currentPos.clone().add(worldMoveVector);
-    newPos.y += verticalVelocity.current * delta;
-
-    // Ground collision
-    if (newPos.y < 0) {
-      newPos.y = 0;
-      verticalVelocity.current = 0;
-    }
+    // --- Horizontal Movement Only (Server handles vertical physics) ---
+    const newPos = currentPos.clone();
+    newPos.x += worldMoveVector.x;
+    newPos.z += worldMoveVector.z;
+    // Keep Y from server (no client-side gravity/jump prediction)
 
     return newPos;
   }, []);
@@ -1002,21 +984,14 @@ const PlayerComponent: React.FC<PlayerProps> = ({
       }
 
       if (distError > 1.0) {
-        // Huge error (> 1 meter): snap immediately (likely teleport or major desync)
+        // Huge error (>1 meter): snap immediately (likely teleport or major desync)
         console.warn(`[RECONCILIATION] SNAP! Error: ${distError.toFixed(3)}m - Teleporting to server position`);
         localPositionRef.current.copy(serverPos);
-      } else if (distError > POSITION_RECONCILE_THRESHOLD) {
-        // Large error: aggressive correction with adaptive speed
-        // Faster correction for larger errors (0.15 to 0.3 lerp factor)
-        const lerpFactor = Math.min(0.3, 0.15 + distError * 0.3);
-        if (distError > 0.5) {
-          console.warn(`[RECONCILIATION] Large error: ${distError.toFixed(3)}m - Lerp factor: ${lerpFactor.toFixed(3)}`);
-        }
-        localPositionRef.current.lerp(serverPos, lerpFactor);
-      } else {
-        // Small error: gentle smoothing to avoid visible pop
-        localPositionRef.current.lerp(serverPos, 0.05);
+      } else if (distError > 0.3) {
+        // Error above threshold: smooth correction
+        localPositionRef.current.lerp(serverPos, 0.2);
       }
+      // Below threshold: no correction needed (prediction is accurate)
 
       // Apply position and rotation to the model group
       group.current.position.copy(localPositionRef.current);
