@@ -57,7 +57,7 @@ const ANIMATIONS = {
 };
 
 // --- Client-side Constants ---
-const PLAYER_SPEED = 7.5; // MUST MATCH server PLAYER_SPEED
+const PLAYER_SPEED = 5.0; // Match server logic and example project
 const SPRINT_MULTIPLIER = 1.8; // Match server logic
 const GRAVITY = -6.0;
 const JUMP_FORCE = 9.0;
@@ -65,7 +65,7 @@ const JUMP_FORCE = 9.0;
 // --- Client-side Prediction Constants ---
 const SERVER_TICK_RATE = 60; // Assuming server runs at 60Hz
 const SERVER_TICK_DELTA = 1 / SERVER_TICK_RATE; // Use this for prediction
-const POSITION_RECONCILE_THRESHOLD = 0.2; // meters
+const POSITION_RECONCILE_THRESHOLD = 0.4; // meters - matches example project
 const ROTATION_RECONCILE_THRESHOLD = 0.1; // Radians
 const RECONCILE_LERP_FACTOR = 0.15; // Gentler reconciliation to reduce visual snapping
 
