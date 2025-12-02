@@ -195,7 +195,7 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   // --- Client-Side Movement Calculation ---
   const calculateClientMovement = useCallback((currentPos: THREE.Vector3, currentRot: THREE.Euler, inputState: any, delta: number): THREE.Vector3 => {
     // Define constants here to ensure they're always current
-    const PLAYER_SPEED = 100.0;
+    const PLAYER_SPEED = 15.0; // Synced with server/src/common.rs
     const SPRINT_MULTIPLIER = 1.8;
     // Skip if no horizontal movement input
     const hasInput = inputState.forward || inputState.backward || inputState.left || inputState.right;
@@ -225,11 +225,32 @@ const PlayerComponent: React.FC<PlayerProps> = ({
     // Scale by speed and delta time
     worldMoveVector.multiplyScalar(speed * delta);
 
-    // --- Horizontal Movement Only (Server handles vertical physics) ---
+    // --- Vertical Movement (Gravity & Jump) ---
+    // We must predict gravity client-side so we don't float when server data is stale
+
+    // Apply Gravity
+    verticalVelocity.current += GRAVITY * delta;
+
+    // Jump (Rising Edge Detection)
+    if (inputState.jump && !prevJumpRef.current && currentPos.y <= 0.01) {
+      verticalVelocity.current = JUMP_FORCE;
+      // console.log("[Client Physics] Jump!");
+    }
+    prevJumpRef.current = !!inputState.jump;
+
+    // Apply Vertical Velocity
+    let newY = currentPos.y + verticalVelocity.current * delta;
+
+    // Ground Collision
+    if (newY <= 0) {
+      newY = 0;
+      verticalVelocity.current = 0;
+    }
+
     const newPos = currentPos.clone();
     newPos.x += worldMoveVector.x;
     newPos.z += worldMoveVector.z;
-    // Keep Y from server (no client-side gravity/jump prediction)
+    newPos.y = newY;
 
     return newPos;
   }, []);
