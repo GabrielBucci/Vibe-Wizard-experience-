@@ -113,12 +113,18 @@ function App() {
           const sentTime = inputTimestampsRef.current.get(newPlayer.lastInputSeq);
           if (sentTime) {
             const rtt = performance.now() - sentTime;
+
+            // Store RTT for stats
+            if (!window.rttSamples) window.rttSamples = [];
+            window.rttSamples.push(rtt);
+
+            // Log high latency immediately
             if (rtt > 200) {
               console.warn(`[NETWORK LAG] High RTT: ${rtt.toFixed(0)}ms for seq ${newPlayer.lastInputSeq}`);
             }
+
             // Cleanup old timestamps
             inputTimestampsRef.current.delete(newPlayer.lastInputSeq);
-            // Also cleanup very old ones to prevent memory leak
             if (inputTimestampsRef.current.size > 100) {
               const oldestSeq = newPlayer.lastInputSeq - 100;
               inputTimestampsRef.current.delete(oldestSeq);
@@ -266,9 +272,17 @@ function App() {
       // Fortnite-style: Send yaw only
       const yawToSend = playerRotationRef.current.y ?? 0;
 
-      // Debug logging
+      // Debug logging & RTT Stats
       if (safeInputState.sequence % 60 === 0) { // Log every second
-        console.log("Sending input", safeInputState, "yaw", yawToSend.toFixed(3), "seq", safeInputState.sequence);
+        let rttStats = "RTT: Waiting...";
+        if (window.rttSamples && window.rttSamples.length > 0) {
+          const avg = window.rttSamples.reduce((a, b) => a + b, 0) / window.rttSamples.length;
+          const max = Math.max(...window.rttSamples);
+          const min = Math.min(...window.rttSamples);
+          rttStats = `RTT Avg: ${avg.toFixed(0)}ms | Min: ${min.toFixed(0)}ms | Max: ${max.toFixed(0)}ms`;
+          window.rttSamples = []; // Reset samples
+        }
+        console.log(`[NET STATS] Seq: ${safeInputState.sequence} | ${rttStats}`);
       }
 
       // Record timestamp for RTT calculation

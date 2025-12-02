@@ -197,8 +197,6 @@ const PlayerComponent: React.FC<PlayerProps> = ({
     // Define constants here to ensure they're always current
     const PLAYER_SPEED = 100.0;
     const SPRINT_MULTIPLIER = 1.8;
-    console.log(`[Client Movement] Player Speed: ${PLAYER_SPEED}`); // Debug log
-
     // Skip if no horizontal movement input
     const hasInput = inputState.forward || inputState.backward || inputState.left || inputState.right;
     if (!hasInput) {
