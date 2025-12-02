@@ -942,16 +942,13 @@ const PlayerComponent: React.FC<PlayerProps> = ({
 
     // LOCAL player prediction
     if (isLocalPlayer && currentInput) {
-      // Use FIXED delta matching server (1/60s) for prediction accuracy
-      // This eliminates prediction drift caused by variable frame times
-      const FIXED_DELTA = 1 / 60;
-
-      // Calculate predicted position based on current input using FIXED DELTA
+      // Use actual frame delta (dt) for prediction, not fixed delta
+      // This ensures prediction matches the actual time elapsed per frame
       const predictedPosition = calculateClientMovement(
         localPositionRef.current,
         localRotationRef.current,
         currentInput,
-        FIXED_DELTA // ← Fixed delta matching server (not frame delta)
+        dt // Use actual frame delta, not fixed SERVER_TICK_DELTA
       );
       localPositionRef.current.copy(predictedPosition);
 
