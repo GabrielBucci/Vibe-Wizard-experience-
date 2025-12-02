@@ -57,7 +57,7 @@ const ANIMATIONS = {
 };
 
 // --- Client-side Constants ---
-const PLAYER_SPEED = 7.5; // Match server logic
+const PLAYER_SPEED = 15.0; // Match server logic
 const SPRINT_MULTIPLIER = 1.8; // Match server logic
 const GRAVITY = -6.0;
 const JUMP_FORCE = 9.0;

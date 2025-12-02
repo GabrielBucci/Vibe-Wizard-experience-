@@ -144,14 +144,14 @@ pub fn update_input_state(player: &mut PlayerData, input: InputState, client_ani
         prev_jump
     );
 
-    // Calculate position delta for rate limiting
+    // Calculate position delta for movement detection
     let position_delta = ((new_position.x - old_position.x).powi(2) + 
                           (new_position.y - old_position.y).powi(2) + 
                           (new_position.z - old_position.z).powi(2)).sqrt();
 
-    // Only update position if it changed significantly (> 0.01 units) or every 10th frame
-    // This reduces DB updates from 60/sec to ~10-20/sec when moving, ~6/sec when idle
-    if position_delta > 0.01 || input.sequence % 10 == 0 {
+    // Only update position if it changed significantly (> 0.01 units)
+    // This prevents unnecessary DB updates when standing still
+    if position_delta > 0.01 {
         player.position = new_position;
     }
 
