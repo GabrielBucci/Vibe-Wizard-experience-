@@ -387,24 +387,13 @@ function App() {
       }
 
       // Spawn Projectile (Server Authoritative)
-      const player = localPlayerRef.current;
-      if (conn && player) {
-        // Calculate spawn position (slightly in front of player and up)
-        const position = new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
-
-        // Calculate direction from rotation
-        const rotation = playerRotationRef.current;
-        const direction = new THREE.Vector3(0, 0, -1).applyEuler(rotation).normalize();
-
-        // Offset position by direction so it spawns in front
-        position.add(direction.clone().multiplyScalar(1.0));
-
-        // Call Reducer
+      if (conn) {
+        // Server computes position and direction from authoritative player data
         // @ts-ignore
-        conn.reducers.spawnProjectile({ position, direction });
-        console.log("Casting spell!", position, direction);
+        conn.reducers.spawnProjectile({});
+        console.log("Projectile spawn requested (server will compute position/direction)");
       } else {
-        console.warn("[DEBUG] Cannot spawn projectile: conn or localPlayer missing", { conn: !!conn, player: !!player });
+        console.warn("[DEBUG] Cannot spawn projectile: conn missing");
       }
     }
   }, []);
@@ -415,18 +404,13 @@ function App() {
     const debugKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyF') {
         console.log("[DEBUG] F key pressed -> Triggering manual cast");
-        // Manual cast logic
-        const player = localPlayerRef.current;
-        if (conn && player) {
-          const position = new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
-          const rotation = playerRotationRef.current;
-          const direction = new THREE.Vector3(0, 0, -1).applyEuler(rotation).normalize();
-          position.add(direction.clone().multiplyScalar(1.0));
+        // Manual cast logic - server computes position/direction
+        if (conn) {
           // @ts-ignore
-          conn.reducers.spawnProjectile({ position, direction });
-          console.log("Manual cast sent!", position, direction);
+          conn.reducers.spawnProjectile({});
+          console.log("Manual cast sent! (server-authoritative)");
         } else {
-          console.warn("[DEBUG] Manual cast failed: conn or player missing");
+          console.warn("[DEBUG] Manual cast failed: conn missing");
         }
       }
     };

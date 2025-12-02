@@ -272,28 +272,52 @@ pub fn update_player_input(
 }
 
 #[spacetimedb::reducer]
-pub fn spawn_projectile(ctx: &ReducerContext, position: Vector3, direction: Vector3) {
+pub fn spawn_projectile(ctx: &ReducerContext) {
     let owner_identity = ctx.sender;
     
-    // Validate that the player exists
-    if ctx.db.player().identity().find(owner_identity).is_none() {
+    // Get server-authoritative player data
+    let Some(player) = ctx.db.player().identity().find(owner_identity) else {
         spacetimedb::log::warn!("Player {} tried to spawn projectile but is not active.", owner_identity);
         return;
-    }
+    };
 
-    // Insert projectile
+    // Compute direction from server-authoritative yaw
+    let yaw = player.rotation.y;
+    let forward = Vector3 {
+        x: yaw.cos(),
+        y: 0.0,
+        z: yaw.sin(),
+    };
+
+    // Apply proper muzzle offset (in front + up)
+    let local_offset = Vector3 { x: 0.0, y: 1.0, z: 1.0 };
+    let rotated_offset = Vector3 {
+        x: forward.x * local_offset.z,
+        y: local_offset.y,
+        z: forward.z * local_offset.z,
+    };
+
+    // Spawn position is server-authoritative
+    let spawn_pos = player.position + rotated_offset;
+
+    // Normalize direction vector
+    let direction_normalized = Vector3 {
+        x: forward.x,
+        y: forward.y,
+        z: forward.z,
+    };
+
+    // Insert projectile with server-computed values
     ctx.db.projectile().insert(ProjectileData {
         id: 0, // auto_inc
         owner_identity,
-        position,
-        direction,
+        position: spawn_pos,
+        direction: direction_normalized,
         speed: PROJECTILE_SPEED,
         damage: PROJECTILE_DAMAGE,
         lifetime: PROJECTILE_LIFETIME,
-        start_position: position,
+        start_position: spawn_pos,
     });
-    
-    // spacetimedb::log::info!("Player {} spawned projectile.", owner_identity);
 }
 
 #[spacetimedb::reducer(update)]

@@ -10,13 +10,4 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-import Vector3 from "./vector_3_type";
-
-export default {
-  get position() {
-    return Vector3;
-  },
-  get direction() {
-    return Vector3;
-  },
-};
+export default {};
