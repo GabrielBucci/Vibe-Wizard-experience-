@@ -34,14 +34,29 @@
 // Declare modules
 mod common;
 mod player_logic;
+mod physics;
 
 use spacetimedb::{ReducerContext, Identity, Table, Timestamp, ScheduleAt};
 use std::time::Duration; // Import standard Duration
 
 // Use items from common module (structs are needed for table definitions)
-use crate::common::{Vector3, InputState};
+use crate::common::{Vector3, InputState, PROJECTILE_LIFETIME, PROJECTILE_SPEED, PROJECTILE_DAMAGE};
 
 // --- Schema Definitions ---
+
+#[spacetimedb::table(name = projectile, public)]
+#[derive(Clone)]
+pub struct ProjectileData {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner_identity: Identity,
+    pub position: Vector3,
+    pub direction: Vector3,
+    pub speed: f32,
+    pub damage: i32,
+    pub lifetime: f32,
+}
 
 #[spacetimedb::table(name = player, public)]
 #[derive(Clone)]
@@ -97,8 +112,8 @@ pub struct GameTickSchedule {
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     spacetimedb::log::info!("[INIT] Initializing Vibe Multiplayer module...");
     if ctx.db.game_tick_schedule().count() == 0 {
-        spacetimedb::log::info!("[INIT] Scheduling initial game tick (every 1 second)...");
-        let loop_duration = Duration::from_secs(1);
+        spacetimedb::log::info!("[INIT] Scheduling initial game tick (every 50ms)...");
+        let loop_duration = Duration::from_millis(50);
         let schedule = GameTickSchedule {
             scheduled_id: 0,
             scheduled_at: ScheduleAt::Interval(loop_duration.into()),
@@ -255,12 +270,82 @@ pub fn update_player_input(
     }
 }
 
+#[spacetimedb::reducer]
+pub fn spawn_projectile(ctx: &ReducerContext, position: Vector3, direction: Vector3) {
+    let owner_identity = ctx.sender;
+    
+    // Validate that the player exists
+    if ctx.db.player().identity().find(owner_identity).is_none() {
+        spacetimedb::log::warn!("Player {} tried to spawn projectile but is not active.", owner_identity);
+        return;
+    }
+
+    // Insert projectile
+    ctx.db.projectile().insert(ProjectileData {
+        id: 0, // auto_inc
+        owner_identity,
+        position,
+        direction,
+        speed: PROJECTILE_SPEED,
+        damage: PROJECTILE_DAMAGE,
+        lifetime: PROJECTILE_LIFETIME,
+    });
+    
+    // spacetimedb::log::info!("Player {} spawned projectile.", owner_identity);
+}
+
 #[spacetimedb::reducer(update)]
 pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
     // Just use a simple log message without timestamp conversion
-    let delta_time = 1.0; // Fixed 1-second tick for simplicity
+    let delta_time: f32 = 0.050; // 50ms tick rate
     
-    player_logic::update_players_logic(ctx, delta_time);
+    // Update Players
+    player_logic::update_players_logic(ctx, delta_time as f64);
+
+    // Update Projectiles
+    for mut projectile in ctx.db.projectile().iter() {
+        // 1. Move Projectile
+        projectile.position.x += projectile.direction.x * projectile.speed * delta_time;
+        projectile.position.y += projectile.direction.y * projectile.speed * delta_time;
+        projectile.position.z += projectile.direction.z * projectile.speed * delta_time;
+        projectile.lifetime -= delta_time;
+
+        // 2. Check Lifetime
+        if projectile.lifetime <= 0.0 {
+            ctx.db.projectile().id().delete(projectile.id);
+            continue;
+        }
+
+        // 3. Check Collision with Players
+        let mut hit_player_identity: Option<Identity> = None;
+        
+        for mut player in ctx.db.player().iter() {
+            // Don't hit yourself
+            if player.identity == projectile.owner_identity {
+                continue;
+            }
+
+            if physics::check_collision(&player.position, &projectile.position) {
+                // HIT!
+                spacetimedb::log::info!("Projectile {} hit player {}!", projectile.id, player.username);
+                
+                hit_player_identity = Some(player.identity);
+
+                // Apply Damage
+                player.health = player.health.saturating_sub(projectile.damage);
+                ctx.db.player().identity().update(player);
+                
+                break; // One hit per projectile (for now)
+            }
+        }
+
+        if hit_player_identity.is_some() {
+            ctx.db.projectile().id().delete(projectile.id);
+        } else {
+            // Persist movement if no hit
+            ctx.db.projectile().id().update(projectile);
+        }
+    }
     
-    spacetimedb::log::debug!("Game tick completed");
+    // spacetimedb::log::debug!("Game tick completed");
 }

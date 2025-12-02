@@ -51,3 +51,21 @@ pub const PLAYER_SPEED: f32 = 15.0;        // authoritative
 pub const SPRINT_MULTIPLIER: f32 = 1.8;
 pub const GRAVITY: f32 = -6.0;
 pub const JUMP_FORCE: f32 = 9.0;
+
+// --- Projectile Constants ---
+pub const PROJECTILE_SPEED: f32 = 15.0;
+pub const PROJECTILE_DAMAGE: i32 = 10;
+pub const PROJECTILE_LIFETIME: f32 = 5.0; // seconds
+pub const PROJECTILE_RADIUS: f32 = 0.2;
+pub const PLAYER_RADIUS: f32 = 0.5;
+pub const PLAYER_HEIGHT: f32 = 2.0;
+
+// Helper struct for Projectile state
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct Projectile {
+    pub owner_identity: spacetimedb::Identity,
+    pub direction: Vector3,
+    pub speed: f32,
+    pub damage: i32,
+    pub lifetime: f32,
+}

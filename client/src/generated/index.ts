@@ -39,6 +39,8 @@ import IdentityDisconnected from "./identity_disconnected_reducer";
 export { IdentityDisconnected };
 import RegisterPlayer from "./register_player_reducer";
 export { RegisterPlayer };
+import SpawnProjectile from "./spawn_projectile_reducer";
+export { SpawnProjectile };
 import UpdatePlayerInput from "./update_player_input_reducer";
 export { UpdatePlayerInput };
 
@@ -51,6 +53,8 @@ import LoggedOutPlayerRow from "./logged_out_player_table";
 export { LoggedOutPlayerRow };
 import PlayerRow from "./player_table";
 export { PlayerRow };
+import ProjectileRow from "./projectile_table";
+export { ProjectileRow };
 
 // Import and reexport all types
 import GameTickSchedule from "./game_tick_schedule_type";
@@ -61,6 +65,8 @@ import LoggedOutPlayerData from "./logged_out_player_data_type";
 export { LoggedOutPlayerData };
 import PlayerData from "./player_data_type";
 export { PlayerData };
+import ProjectileData from "./projectile_data_type";
+export { ProjectileData };
 import Vector3 from "./vector_3_type";
 export { Vector3 };
 
@@ -99,12 +105,24 @@ const tablesSchema = __schema(
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  __table({
+    name: 'projectile',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'projectile_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ProjectileRow),
 );
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("game_tick", GameTick),
   __reducerSchema("register_player", RegisterPlayer),
+  __reducerSchema("spawn_projectile", SpawnProjectile),
   __reducerSchema("update_player_input", UpdatePlayerInput),
 );
 

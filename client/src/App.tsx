@@ -63,9 +63,24 @@ let conn: DbConnection | null = null;
 function App() {
   const [connected, setConnected] = useState(false);
   const [identity, setIdentity] = useState<Identity | null>(null);
+  const identityRef = useRef<Identity | null>(null);
+
+  // Sync identity ref
+  useEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+
   const [statusMessage, setStatusMessage] = useState("Connecting...");
   const [players, setPlayers] = useState<ReadonlyMap<string, PlayerData>>(new Map());
+  const [projectiles, setProjectiles] = useState<Map<string, any>>(new Map());
   const [localPlayer, setLocalPlayer] = useState<PlayerData | null>(null);
+  const localPlayerRef = useRef<PlayerData | null>(null); // Ref to access current player in callbacks
+
+  // Sync ref with state
+  useEffect(() => {
+    localPlayerRef.current = localPlayer;
+  }, [localPlayer]);
+
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [isDebugPanelExpanded, setIsDebugPanelExpanded] = useState(false);
   const [isPointerLocked, setIsPointerLocked] = useState(false); // State for pointer lock status
@@ -93,7 +108,7 @@ function App() {
     conn.db.player.onInsert((_ctx: EventContext, player: PlayerData) => {
       console.log("Player inserted (callback):", player.identity.toHexString());
       setPlayers((prev: ReadonlyMap<string, PlayerData>) => new Map(prev).set(player.identity.toHexString(), player));
-      if (identity && player.identity.toHexString() === identity.toHexString()) {
+      if (identityRef.current && player.identity.toHexString() === identityRef.current.toHexString()) {
         setLocalPlayer(player);
         setStatusMessage(`Registered as ${player.username}`);
       }
@@ -105,7 +120,7 @@ function App() {
         newMap.set(newPlayer.identity.toHexString(), newPlayer);
         return newMap;
       });
-      if (identity && newPlayer.identity.toHexString() === identity.toHexString()) {
+      if (identityRef.current && newPlayer.identity.toHexString() === identityRef.current.toHexString()) {
         setLocalPlayer(newPlayer);
 
         // RTT Calculation Debugging
@@ -151,13 +166,31 @@ function App() {
         newMap.delete(player.identity.toHexString());
         return newMap;
       });
-      if (identity && player.identity.toHexString() === identity.toHexString()) {
+      if (identityRef.current && player.identity.toHexString() === identityRef.current.toHexString()) {
         setLocalPlayer(null);
         setStatusMessage("Local player deleted!");
       }
     });
+
+    // --- Projectile Callbacks ---
+    conn.db.projectile.onInsert((_ctx: EventContext, projectile: any) => {
+      setProjectiles((prev) => new Map(prev).set(projectile.id.toString(), projectile));
+    });
+
+    conn.db.projectile.onUpdate((_ctx: EventContext, _oldProjectile: any, newProjectile: any) => {
+      setProjectiles((prev) => new Map(prev).set(newProjectile.id.toString(), newProjectile));
+    });
+
+    conn.db.projectile.onDelete((_ctx: EventContext, projectile: any) => {
+      setProjectiles((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(projectile.id.toString());
+        return newMap;
+      });
+    });
+
     console.log("Table callbacks registered.");
-  }, [identity]); // Keep identity dependency
+  }, []); // No dependency on identity needed
 
   const onSubscriptionApplied = useCallback(() => {
     console.log("Subscription applied successfully.");
@@ -166,7 +199,7 @@ function App() {
         const currentPlayers = new Map<string, PlayerData>();
         for (const player of conn.db.player.iter()) {
           currentPlayers.set(player.identity.toHexString(), player);
-          if (identity && player.identity.toHexString() === identity.toHexString()) {
+          if (identityRef.current && player.identity.toHexString() === identityRef.current.toHexString()) {
             setLocalPlayer(player);
           }
         }
@@ -174,7 +207,16 @@ function App() {
       }
       return prev;
     });
-  }, [identity]); // Keep identity dependency
+
+    // Initial Projectile Load
+    if (conn) {
+      const currentProjectiles = new Map<string, any>();
+      for (const projectile of conn.db.projectile.iter()) {
+        currentProjectiles.set(projectile.id.toString(), projectile);
+      }
+      setProjectiles(currentProjectiles);
+    }
+  }, []); // No dependency on identity needed
 
   const onSubscriptionError = useCallback((error: any) => {
     console.error("Subscription error:", error);
@@ -186,6 +228,7 @@ function App() {
     console.log("Subscribing to tables...");
     const subscription = conn.subscriptionBuilder();
     subscription.subscribe("SELECT * FROM player");
+    subscription.subscribe("SELECT * FROM projectile");
     subscription.onApplied(onSubscriptionApplied);
     subscription.onError(onSubscriptionError);
   }, [identity, onSubscriptionApplied, onSubscriptionError]); // Add dependencies
@@ -335,15 +378,65 @@ function App() {
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (event.button === 0) {
+      // Trigger Attack Animation locally
       if (!currentInputRef.current.attack) {
         currentInputRef.current.attack = true;
-        // Keep attack true for the full animation duration
-        // The animation completion handler will transition back to idle
         setTimeout(() => {
           currentInputRef.current.attack = false;
-        }, 2000); // 2 seconds to allow full animation to play
+        }, 2000);
+      }
+
+      // Spawn Projectile (Server Authoritative)
+      const player = localPlayerRef.current;
+      if (conn && player) {
+        // Calculate spawn position (slightly in front of player and up)
+        const position = new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
+
+        // Calculate direction from rotation
+        const rotation = playerRotationRef.current;
+        const direction = new THREE.Vector3(0, 0, -1).applyEuler(rotation).normalize();
+
+        // Offset position by direction so it spawns in front
+        position.add(direction.clone().multiplyScalar(1.0));
+
+        // Call Reducer
+        // @ts-ignore
+        conn.reducers.spawnProjectile({ position, direction });
+        console.log("Casting spell!", position, direction);
+      } else {
+        console.warn("[DEBUG] Cannot spawn projectile: conn or localPlayer missing", { conn: !!conn, player: !!player });
       }
     }
+  }, []);
+
+  // --- Debug Input Listeners ---
+  useEffect(() => {
+    const debugMouseDown = () => console.log("[DEBUG] Global mousedown detected");
+    const debugKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyF') {
+        console.log("[DEBUG] F key pressed -> Triggering manual cast");
+        // Manual cast logic
+        const player = localPlayerRef.current;
+        if (conn && player) {
+          const position = new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
+          const rotation = playerRotationRef.current;
+          const direction = new THREE.Vector3(0, 0, -1).applyEuler(rotation).normalize();
+          position.add(direction.clone().multiplyScalar(1.0));
+          // @ts-ignore
+          conn.reducers.spawnProjectile({ position, direction });
+          console.log("Manual cast sent!", position, direction);
+        } else {
+          console.warn("[DEBUG] Manual cast failed: conn or player missing");
+        }
+      }
+    };
+
+    window.addEventListener('mousedown', debugMouseDown);
+    window.addEventListener('keydown', debugKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', debugMouseDown);
+      window.removeEventListener('keydown', debugKeyDown);
+    };
   }, []);
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
@@ -360,33 +453,42 @@ function App() {
     // console.log("Pointer Lock Changed: ", document.pointerLockElement === document.body);
   }, []);
 
-  const setupInputListeners = useCallback(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('pointerlockchange', handlePointerLockChange); // Listen for lock changes
-    console.log("Input listeners added.");
-  }, [handleKeyDown, handleKeyUp, handleMouseDown, handleMouseUp, handlePointerLockChange]);
+  // --- Input Listeners Effect ---
+  useEffect(() => {
+    if (!connected) return;
 
-  const removeInputListeners = useCallback(() => {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('keyup', handleKeyUp);
-    window.removeEventListener('mousedown', handleMouseDown);
-    window.removeEventListener('mouseup', handleMouseUp);
-    document.removeEventListener('pointerlockchange', handlePointerLockChange); // Remove listener
-    console.log("Input listeners removed.");
-  }, [handleKeyDown, handleKeyUp, handleMouseDown, handleMouseUp, handlePointerLockChange]);
+    const onKeyDown = (e: KeyboardEvent) => handleKeyDown(e);
+    const onKeyUp = (e: KeyboardEvent) => handleKeyUp(e);
+    const onMouseDown = (e: MouseEvent) => handleMouseDown(e);
+    const onMouseUp = (e: MouseEvent) => handleMouseUp(e);
+    const onPointerLockChange = () => handlePointerLockChange();
 
-  const setupDelegatedListeners = useCallback(() => {
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
+    console.log("Input listeners attached via useEffect");
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      console.log("Input listeners detached via useEffect");
+    };
+  }, [connected, handleKeyDown, handleKeyUp, handleMouseDown, handleMouseUp, handlePointerLockChange]);
+
+  // --- Delegated Listeners Effect ---
+  useEffect(() => {
+    if (!connected) return;
     document.body.addEventListener('click', handleDelegatedClick, true);
-    console.log("Delegated listener added to body.");
-  }, [handleDelegatedClick]);
-
-  const removeDelegatedListeners = useCallback(() => {
-    document.body.removeEventListener('click', handleDelegatedClick, true);
-    console.log("Delegated listener removed from body.");
-  }, [handleDelegatedClick]);
+    return () => {
+      document.body.removeEventListener('click', handleDelegatedClick, true);
+    };
+  }, [connected, handleDelegatedClick]);
 
   // --- Game Loop Effect (60Hz Input Sending) ---
   useEffect(() => {
@@ -413,16 +515,12 @@ function App() {
     console.log("Running Connection Effect Hook...");
     if (conn) {
       console.log("Connection already established, skipping setup.");
-      if (connected) {
-        setupInputListeners();
-        setupDelegatedListeners();
-      }
       return;
     }
 
     // Get connection config from environment variables with fallbacks for local dev
     const dbHost = import.meta.env.VITE_SPACETIME_HOST || "localhost:3000";
-    const dbName = import.meta.env.VITE_SPACETIME_MODULE_NAME || "vibe-multiplayer";
+    const dbName = import.meta.env.VITE_SPACETIME_MODULE_NAME || "vibe-wizard-experience";
 
     // Determine protocol based on host (https for production, ws for local)
     const protocol = dbHost.includes('maincloud.spacetimedb.com') ? 'https' : 'ws';
@@ -438,8 +536,6 @@ function App() {
       setStatusMessage(`Connected as ${id.toHexString().substring(0, 8)}...`);
       subscribeToTables();
       registerTableCallbacks();
-      setupInputListeners();
-      setupDelegatedListeners();
       setShowJoinDialog(true);
     };
 
@@ -462,9 +558,7 @@ function App() {
       .build();
 
     return () => {
-      console.log("Cleaning up connection effect - removing listeners.");
-      removeInputListeners();
-      removeDelegatedListeners();
+      console.log("Cleaning up connection effect.");
     };
   }, []);
 
@@ -504,6 +598,7 @@ function App() {
         <>
           <GameScene
             players={players}
+            projectiles={projectiles}
             localPlayerIdentity={identity}
             onPlayerRotation={handlePlayerRotation}
             currentInputRef={currentInputRef}

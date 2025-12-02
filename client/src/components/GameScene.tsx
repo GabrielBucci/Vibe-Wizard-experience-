@@ -35,12 +35,14 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { Box, Plane, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { DirectionalLightHelper, CameraHelper } from 'three';
-import { PlayerData, InputState } from '../generated';
+import { ProjectileManager } from './ProjectileManager';
+import { PlayerData, InputState, ProjectileData } from '../generated';
 import { Identity } from 'spacetimedb';
 import { Player } from './Player';
 
 interface GameSceneProps {
   players: ReadonlyMap<string, any>;
+  projectiles: Map<string, any>;
   localPlayerIdentity: Identity | null;
   onPlayerRotation?: (rotation: THREE.Euler) => void;
   currentInputRef?: React.MutableRefObject<any>;
@@ -103,6 +105,7 @@ const SceneEnvironment: React.FC = () => {
 
 export const GameScene: React.FC<GameSceneProps> = ({
   players,
+  projectiles,
   localPlayerIdentity,
   onPlayerRotation,
   currentInputRef,
@@ -166,6 +169,9 @@ export const GameScene: React.FC<GameSceneProps> = ({
         cellThickness={1}
         cellColor={new THREE.Color('#888888')}
       />
+
+      {/* Render Projectiles */}
+      <ProjectileManager projectiles={projectiles} />
 
       {/* Render Players */}
       {Array.from(players.values()).map((player) => {
