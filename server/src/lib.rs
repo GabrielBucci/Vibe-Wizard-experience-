@@ -274,40 +274,50 @@ pub fn update_player_input(
 #[spacetimedb::reducer]
 pub fn spawn_projectile(ctx: &ReducerContext) {
     let owner_identity = ctx.sender;
-    
-    // Get server-authoritative player data
+
+    // 1️⃣ Fetch server-authoritative player data
     let Some(player) = ctx.db.player().identity().find(owner_identity) else {
-        spacetimedb::log::warn!("Player {} tried to spawn projectile but is not active.", owner_identity);
+        spacetimedb::log::warn!(
+            "Player {} tried to spawn projectile but is not active.", 
+            owner_identity
+        );
         return;
     };
 
-    // Compute direction from server-authoritative yaw
+    // 2️⃣ Extract yaw
     let yaw = player.rotation.y;
+
+    // 3️⃣ Compute forward vector from yaw (horizontal plane)
     let forward = Vector3 {
-        x: yaw.cos(),
+        x: yaw.sin(),   // Horizontal X
+        y: 0.0,         // No vertical component
+        z: yaw.cos(),   // Horizontal Z
+    };
+
+    // 4️⃣ Compute right vector perpendicular to forward
+    let right = Vector3 {
+        x: forward.z,
         y: 0.0,
-        z: yaw.sin(),
+        z: -forward.x,
     };
 
-    // Apply proper muzzle offset (in front + up)
-    let local_offset = Vector3 { x: 0.0, y: 1.0, z: 1.0 };
-    let rotated_offset = Vector3 {
-        x: forward.x * local_offset.z,
-        y: local_offset.y,
-        z: forward.z * local_offset.z,
-    };
+    // 5️⃣ Define local muzzle offset (player space)
+    // x: sideways, y: up, z: forward
+    let muzzle_offset = Vector3 { x: 0.0, y: 1.0, z: 1.0 };
 
-    // Spawn position is server-authoritative
+    // 6️⃣ Rotate local offset into world space
+    let rotated_offset =
+        right * muzzle_offset.x +
+        Vector3 { x: 0.0, y: 1.0, z: 0.0 } * muzzle_offset.y +
+        forward * muzzle_offset.z;
+
+    // 7️⃣ Compute spawn position
     let spawn_pos = player.position + rotated_offset;
 
-    // Normalize direction vector
-    let direction_normalized = Vector3 {
-        x: forward.x,
-        y: forward.y,
-        z: forward.z,
-    };
+    // 8️⃣ Use forward vector as direction
+    let direction_normalized = forward;
 
-    // Insert projectile with server-computed values
+    // 9️⃣ Insert projectile into database
     ctx.db.projectile().insert(ProjectileData {
         id: 0, // auto_inc
         owner_identity,
@@ -318,6 +328,8 @@ pub fn spawn_projectile(ctx: &ReducerContext) {
         lifetime: PROJECTILE_LIFETIME,
         start_position: spawn_pos,
     });
+
+    spacetimedb::log::info!("Player {} spawned a projectile at {:?}", owner_identity, spawn_pos);
 }
 
 #[spacetimedb::reducer(update)]
@@ -331,8 +343,7 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
     // --- Projectile Logic ---
     for mut projectile in ctx.db.projectile().iter() {
         let pos = projectile.position;
-        let speed = 15.0; // m/s
-        let next_pos = pos + projectile.direction * speed * delta_time;
+        let next_pos = pos + projectile.direction * projectile.speed * delta_time;
 
         // Collision Detection (Simple distance check against all players)
         let mut hit = false;
