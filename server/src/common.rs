@@ -47,7 +47,7 @@ pub struct InputState {
 
 // --- Game Constants ---
 
-pub const PLAYER_SPEED: f32 = 5.0;         // authoritative (matches client for smooth prediction)
+pub const PLAYER_SPEED: f32 = 7.5;         // authoritative
 pub const SPRINT_MULTIPLIER: f32 = 1.8;
 pub const GRAVITY: f32 = -6.0;
 pub const JUMP_FORCE: f32 = 9.0;

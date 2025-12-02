@@ -57,7 +57,7 @@ const ANIMATIONS = {
 };
 
 // --- Client-side Constants ---
-const PLAYER_SPEED = 5.0; // Match server logic and example project
+const PLAYER_SPEED = 7.5; // Match server logic
 const SPRINT_MULTIPLIER = 1.8; // Match server logic
 const GRAVITY = -6.0;
 const JUMP_FORCE = 9.0;
@@ -992,12 +992,16 @@ const PlayerComponent: React.FC<PlayerProps> = ({
         console.warn(`[RECONCILIATION] SNAP! Error: ${distError.toFixed(3)}m - Teleporting to server position`);
         localPositionRef.current.x = serverPos.x;
         localPositionRef.current.z = serverPos.z;
-      } else if (distError > 0.3) {
-        // Error above threshold: smooth correction (only X/Z, Y is already synced)
-        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.2);
-        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.2);
+      } else if (distError > 0.5) {
+        // Large error: smooth correction (only X/Z, Y is already synced)
+        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.15);
+        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.15);
+      } else if (distError > 0.15) {
+        // Small error: very gentle correction to avoid visible stuttering
+        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.08);
+        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.08);
       }
-      // Below threshold: no correction needed (prediction is accurate)
+      // Dead zone: errors <0.15m are ignored (prediction is accurate enough)
 
       // Apply position and rotation to the model group
       group.current.position.copy(localPositionRef.current);
