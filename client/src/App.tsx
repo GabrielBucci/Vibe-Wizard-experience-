@@ -246,9 +246,9 @@ function App() {
       const yawToSend = playerRotationRef.current.y ?? 0;
 
       // Debug logging - log every 30 inputs (once per second at 30Hz)
-      if (safeInputState.sequence % 30 === 0) {
-        console.log(`[INPUT SEND] Seq: ${safeInputState.sequence} | Yaw: ${yawToSend.toFixed(3)} | Anim: ${currentAnimation} | Changed: ${changed}`);
-      }
+      // if (safeInputState.sequence % 30 === 0) {
+      //   console.log(`[INPUT SEND] Seq: ${safeInputState.sequence} | Yaw: ${yawToSend.toFixed(3)} | Anim: ${currentAnimation} | Changed: ${changed}`);
+      // }
 
       conn.reducers.updatePlayerInput({
         input: safeInputState,
@@ -308,7 +308,7 @@ function App() {
   // --- Listener Setup/Removal Functions ---
   const handlePointerLockChange = useCallback(() => {
     setIsPointerLocked(document.pointerLockElement === document.body);
-    console.log("Pointer Lock Changed: ", document.pointerLockElement === document.body);
+    // console.log("Pointer Lock Changed: ", document.pointerLockElement === document.body);
   }, []);
 
   const setupInputListeners = useCallback(() => {
