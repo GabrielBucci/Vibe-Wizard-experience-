@@ -184,6 +184,11 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   const remoteTargetPosition = useRef<THREE.Vector3>(new THREE.Vector3());
   const remoteTargetRotation = useRef<number>(0);
 
+  // --- Server Update Diagnostic Refs ---
+  const lastServerUpdate = useRef(performance.now());
+  const serverUpdateCount = useRef(0);
+  const lastServerPos = useRef(new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z));
+
   // --- Client-Side Movement Calculation ---
   const calculateClientMovement = useCallback((currentPos: THREE.Vector3, currentRot: THREE.Euler, inputState: any, delta: number): THREE.Vector3 => {
     // We need to process movement even if no input if we are in the air (gravity)
@@ -755,11 +760,6 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   // Set up pointer lock for camera control if local player
   useEffect(() => {
     if (!isLocalPlayer) return;
-
-    // --- DIAGNOSTIC: Track server update frequency ---
-    const lastServerUpdate = useRef(performance.now());
-    const serverUpdateCount = useRef(0);
-    const lastServerPos = useRef(new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z));
 
     const checkServerUpdate = () => {
       const currentServerPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
