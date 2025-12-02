@@ -56,6 +56,7 @@ pub struct ProjectileData {
     pub speed: f32,
     pub damage: i32,
     pub lifetime: f32,
+    pub start_position: Vector3,
 }
 
 #[spacetimedb::table(name = player, public)]
@@ -289,6 +290,7 @@ pub fn spawn_projectile(ctx: &ReducerContext, position: Vector3, direction: Vect
         speed: PROJECTILE_SPEED,
         damage: PROJECTILE_DAMAGE,
         lifetime: PROJECTILE_LIFETIME,
+        start_position: position,
     });
     
     // spacetimedb::log::info!("Player {} spawned projectile.", owner_identity);

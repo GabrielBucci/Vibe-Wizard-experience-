@@ -24,11 +24,50 @@ use spacetimedb::{SpacetimeType};
 // --- Shared Structs ---
 
 // Helper struct for 3D vectors
-#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+impl Vector3 {
+    pub fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+}
+
+impl std::ops::Add for Vector3 {
+    type Output = Vector3;
+    fn add(self, other: Vector3) -> Vector3 {
+        Vector3 {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
+    }
+}
+
+impl std::ops::Sub for Vector3 {
+    type Output = Vector3;
+    fn sub(self, other: Vector3) -> Vector3 {
+        Vector3 {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
+    }
+}
+
+impl std::ops::Mul<f32> for Vector3 {
+    type Output = Vector3;
+    fn mul(self, scalar: f32) -> Vector3 {
+        Vector3 {
+            x: self.x * scalar,
+            y: self.y * scalar,
+            z: self.z * scalar,
+        }
+    }
 }
 
 // Helper struct for player input state

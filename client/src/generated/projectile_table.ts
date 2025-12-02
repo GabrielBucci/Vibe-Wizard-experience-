@@ -24,4 +24,7 @@ export default __t.row({
   speed: __t.f32(),
   damage: __t.i32(),
   lifetime: __t.f32(),
+  get startPosition() {
+    return Vector3;
+  },
 });
