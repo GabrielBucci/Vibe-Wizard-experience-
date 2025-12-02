@@ -954,7 +954,14 @@ const PlayerComponent: React.FC<PlayerProps> = ({
 
       // RECONCILIATION: adaptive lerp based on error magnitude
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);
-      const distError = localPositionRef.current.distanceTo(serverPos);
+
+      // Always sync Y from server (we don't predict vertical movement)
+      localPositionRef.current.y = serverPos.y;
+
+      // Only reconcile horizontal position (X/Z)
+      const localPosXZ = new THREE.Vector2(localPositionRef.current.x, localPositionRef.current.z);
+      const serverPosXZ = new THREE.Vector2(serverPos.x, serverPos.z);
+      const distError = localPosXZ.distanceTo(serverPosXZ);
 
       // --- DIAGNOSTIC LOGGING ---
       frameCounter.current++;
@@ -983,10 +990,12 @@ const PlayerComponent: React.FC<PlayerProps> = ({
       if (distError > 1.0) {
         // Huge error (>1 meter): snap immediately (likely teleport or major desync)
         console.warn(`[RECONCILIATION] SNAP! Error: ${distError.toFixed(3)}m - Teleporting to server position`);
-        localPositionRef.current.copy(serverPos);
+        localPositionRef.current.x = serverPos.x;
+        localPositionRef.current.z = serverPos.z;
       } else if (distError > 0.3) {
-        // Error above threshold: smooth correction
-        localPositionRef.current.lerp(serverPos, 0.2);
+        // Error above threshold: smooth correction (only X/Z, Y is already synced)
+        localPositionRef.current.x = THREE.MathUtils.lerp(localPositionRef.current.x, serverPos.x, 0.2);
+        localPositionRef.current.z = THREE.MathUtils.lerp(localPositionRef.current.z, serverPos.z, 0.2);
       }
       // Below threshold: no correction needed (prediction is accurate)
 
