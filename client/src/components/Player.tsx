@@ -102,6 +102,8 @@ interface PlayerProps {
   playerData: any;
   isLocalPlayer: boolean;
   onRotationChange?: (rotation: THREE.Euler) => void;
+  onHandPositionUpdate?: (position: THREE.Vector3) => void;
+  onSpawnProjectile?: () => void;
   currentInput?: any; // Prop to receive current input for local player
   isDebugArrowVisible?: boolean; // Prop to control debug arrow visibility
   isDebugPanelVisible?: boolean; // Prop to control general debug helpers visibility
@@ -111,6 +113,8 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   playerData,
   isLocalPlayer,
   onRotationChange,
+  onHandPositionUpdate,
+  onSpawnProjectile,
   currentInput, // Receive input state
   isDebugArrowVisible = false,
   isDebugPanelVisible = false // Destructure with default false
@@ -131,6 +135,9 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   const localPositionRef = useRef<THREE.Vector3>(new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z));
   const localRotationRef = useRef<THREE.Euler>(new THREE.Euler(0, 0, 0, 'YXZ')); // Initialize with zero rotation
   const debugArrowRef = useRef<THREE.ArrowHelper | null>(null); // Declare the ref for the debug arrow
+  const handBoneRef = useRef<THREE.Bone | null>(null);
+  const projectileFiredRef = useRef(false);
+  const lastAnimationRef = useRef<string>(ANIMATIONS.IDLE);
 
   // Camera control variables
   const isPointerLocked = useRef(false);
@@ -314,6 +321,10 @@ const PlayerComponent: React.FC<PlayerProps> = ({
     loader.load(
       mainModelPath,
       (fbx) => {
+        if (!fbx) {
+          console.error(`[Player Model Effect ${playerData.username}] FBX loader returned undefined/null for ${mainModelPath}`);
+          return;
+        }
 
         // Simplified: Just add the model, setup scale, shadows etc.
         if (characterClass === 'Paladin') {
@@ -346,6 +357,15 @@ const PlayerComponent: React.FC<PlayerProps> = ({
           }
           // --- END TRAVERSE ATTEMPT --- 
 
+          // Find the right hand bone
+          let rightHandBone: THREE.Bone | null = null;
+          fbx.traverse((child) => {
+            if (child.type === 'Bone' && child.name.includes('RightHand')) {
+              rightHandBone = child as THREE.Bone;
+              console.log(`[Player ${playerData.username}] Found RightHand bone: ${child.name}`);
+            }
+          });
+          handBoneRef.current = rightHandBone;
         }
 
         const newMixer = new THREE.AnimationMixer(fbx);
@@ -760,10 +780,10 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   // --- Server State Reconciliation --- -> Now handled within useFrame
   // useEffect(() => {
   //   if (!isLocalPlayer || !modelLoaded) return; 
-
+  // 
   //   // Update internal ref used by useFrame
   //   dataRef.current = playerData;
-
+  // 
   // }, [playerData, isLocalPlayer, modelLoaded]);
 
   // Set up pointer lock for camera control if local player
@@ -1016,6 +1036,52 @@ const PlayerComponent: React.FC<PlayerProps> = ({
         dt // Use actual frame delta, not fixed SERVER_TICK_DELTA
       );
       localPositionRef.current.copy(predictedPosition);
+
+      // --- Hand Position Tracking & Projectile Spawning ---
+      if (handBoneRef.current && onHandPositionUpdate) {
+        const handPos = new THREE.Vector3();
+        handBoneRef.current.getWorldPosition(handPos);
+        onHandPositionUpdate(handPos);
+
+        // Check animation timing for projectile spawn
+        if (mixer && onSpawnProjectile) {
+          const action = animations[currentAnimation];
+          if (action && action.isRunning()) {
+            const time = action.time;
+            const duration = action.getClip().duration;
+            const progress = time / duration;
+
+            // Define spawn timings (percentage of animation)
+            const CAST_SPAWN_TIME = 0.67; // 67%
+            const ATTACK_SPAWN_TIME = 0.55; // 55%
+
+            let shouldSpawn = false;
+
+            if (currentAnimation === ANIMATIONS.CAST) {
+              // Check if we just crossed the threshold
+              if (progress >= CAST_SPAWN_TIME && !projectileFiredRef.current) {
+                shouldSpawn = true;
+              }
+            } else if (currentAnimation === ANIMATIONS.ATTACK) {
+              if (progress >= ATTACK_SPAWN_TIME && !projectileFiredRef.current) {
+                shouldSpawn = true;
+              }
+            }
+
+            if (shouldSpawn) {
+              console.log(`[Player] Spawning projectile at animation progress: ${progress.toFixed(2)}`);
+              onSpawnProjectile();
+              projectileFiredRef.current = true;
+            }
+
+            // Reset flag when animation changes or loops
+            if (currentAnimation !== lastAnimationRef.current || time < 0.1) {
+              projectileFiredRef.current = false;
+              lastAnimationRef.current = currentAnimation;
+            }
+          }
+        }
+      }
 
       // RECONCILIATION: only position (server authoritative)
       const serverPos = new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z);

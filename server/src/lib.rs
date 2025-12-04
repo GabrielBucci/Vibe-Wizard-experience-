@@ -19,7 +19,7 @@
  *    - All tables use Identity as primary keys where appropriate
  *    - Connection between tables maintained through identity references
  * 
- * When modifying:
+ * 22. When modifying:
  *    - Table changes require regenerating TypeScript bindings
  *    - Add `public` tag to tables that need client access
  *    - New reducers should follow naming convention and error handling patterns
@@ -31,7 +31,6 @@
  *    - player_logic.rs: Player movement and state update calculations
  */
 
-// Declare modules
 mod common;
 mod player_logic;
 mod physics;
@@ -40,7 +39,7 @@ use spacetimedb::{ReducerContext, Identity, Table, Timestamp, ScheduleAt};
 use std::time::Duration; // Import standard Duration
 
 // Use items from common module (structs are needed for table definitions)
-use crate::common::{Vector3, InputState, PROJECTILE_LIFETIME, PROJECTILE_SPEED, PROJECTILE_DAMAGE};
+use crate::common::{Vector3, InputState, PROJECTILE_LIFETIME, PROJECTILE_SPEED, PROJECTILE_DAMAGE, PROJECTILE_RADIUS, PLAYER_RADIUS};
 
 // --- Schema Definitions ---
 
@@ -272,7 +271,7 @@ pub fn update_player_input(
 }
 
 #[spacetimedb::reducer]
-pub fn spawn_projectile(ctx: &ReducerContext) {
+pub fn spawn_projectile(ctx: &ReducerContext, hand_position: Vector3) {
     let owner_identity = ctx.sender;
 
     // 1️⃣ Fetch server-authoritative player data
@@ -294,30 +293,13 @@ pub fn spawn_projectile(ctx: &ReducerContext) {
         z: yaw.cos(),   // Horizontal Z
     };
 
-    // 4️⃣ Compute right vector perpendicular to forward
-    let right = Vector3 {
-        x: forward.z,
-        y: 0.0,
-        z: -forward.x,
-    };
+    // 4️⃣ Use hand position as spawn position
+    let spawn_pos = hand_position;
 
-    // 5️⃣ Define local muzzle offset (player space)
-    // x: sideways, y: up, z: forward
-    let muzzle_offset = Vector3 { x: 0.0, y: 1.0, z: 1.0 };
-
-    // 6️⃣ Rotate local offset into world space
-    let rotated_offset =
-        right * muzzle_offset.x +
-        Vector3 { x: 0.0, y: 1.0, z: 0.0 } * muzzle_offset.y +
-        forward * muzzle_offset.z;
-
-    // 7️⃣ Compute spawn position
-    let spawn_pos = player.position + rotated_offset;
-
-    // 8️⃣ Use forward vector as direction
+    // 5️⃣ Use forward vector as direction
     let direction_normalized = forward;
 
-    // 9️⃣ Insert projectile into database
+    // 6️⃣ Insert projectile into database
     ctx.db.projectile().insert(ProjectileData {
         id: 0, // auto_inc
         owner_identity,
@@ -351,7 +333,7 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
             if player.identity != projectile.owner_identity {
                 // Check distance
                 let dist = (player.position - next_pos).length();
-                if dist < 1.0 { // Hit radius
+                if dist < (PLAYER_RADIUS + PROJECTILE_RADIUS) { // Hit radius
                     hit = true;
                     spacetimedb::log::info!("Projectile hit player: {}", player.username);
                     // TODO: Deal damage

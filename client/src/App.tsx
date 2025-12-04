@@ -99,6 +99,7 @@ function App() {
 
   // New import for handling player rotation data
   const playerRotationRef = useRef<THREE.Euler>(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const handPositionRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
 
   // --- Moved Table Callbacks/Subscription Functions Up ---
   const registerTableCallbacks = useCallback(() => {
@@ -352,6 +353,27 @@ function App() {
   }, [identity, localPlayer, connected, determineAnimation]);
 
   // Add player rotation handler
+  const handleHandPositionUpdate = useCallback((position: THREE.Vector3) => {
+    handPositionRef.current.copy(position);
+  }, []);
+
+  // --- Projectile Spawn Handler ---
+  const handleSpawnProjectile = useCallback(() => {
+    if (conn && handPositionRef.current) {
+      // Create a plain object to ensure SpacetimeDB serialization works
+      const spawnPos = {
+        x: handPositionRef.current.x,
+        y: handPositionRef.current.y,
+        z: handPositionRef.current.z
+      };
+
+      // @ts-ignore
+      conn.reducers.spawnProjectile({ handPosition: spawnPos });
+    } else {
+      console.warn("[DEBUG] Cannot spawn projectile: conn missing or handPositionRef invalid", { conn: !!conn, handPos: handPositionRef.current });
+    }
+  }, []);
+
   const handlePlayerRotation = useCallback((rotation: THREE.Euler) => {
     // Update our stored rotation whenever the player rotates (from mouse movements)
     playerRotationRef.current.copy(rotation);
@@ -386,15 +408,7 @@ function App() {
         }, 2000);
       }
 
-      // Spawn Projectile (Server Authoritative)
-      if (conn) {
-        // Server computes position and direction from authoritative player data
-        // @ts-ignore
-        conn.reducers.spawnProjectile({});
-        console.log("Projectile spawn requested (server will compute position/direction)");
-      } else {
-        console.warn("[DEBUG] Cannot spawn projectile: conn missing");
-      }
+      // Note: Projectile spawn is now triggered by animation callback via handleSpawnProjectile
     }
   }, []);
 
@@ -404,13 +418,12 @@ function App() {
     const debugKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyF') {
         console.log("[DEBUG] F key pressed -> Triggering manual cast");
-        // Manual cast logic - server computes position/direction
-        if (conn) {
-          // @ts-ignore
-          conn.reducers.spawnProjectile({});
-          console.log("Manual cast sent! (server-authoritative)");
-        } else {
-          console.warn("[DEBUG] Manual cast failed: conn missing");
+        // Trigger Cast Animation locally
+        if (!currentInputRef.current.castSpell) {
+          currentInputRef.current.castSpell = true;
+          setTimeout(() => {
+            currentInputRef.current.castSpell = false;
+          }, 2000);
         }
       }
     };
@@ -586,6 +599,8 @@ function App() {
             projectiles={projectiles}
             localPlayerIdentity={identity}
             onPlayerRotation={handlePlayerRotation}
+            onHandPositionUpdate={handleHandPositionUpdate}
+            onSpawnProjectile={handleSpawnProjectile}
             currentInputRef={currentInputRef}
             isDebugPanelVisible={isDebugPanelExpanded}
           />

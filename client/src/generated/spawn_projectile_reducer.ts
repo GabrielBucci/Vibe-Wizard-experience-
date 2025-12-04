@@ -10,4 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {};
+import Vector3 from "./vector_3_type";
+
+export default {
+  get handPosition() {
+    return Vector3;
+  },
+};

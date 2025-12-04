@@ -45,6 +45,8 @@ interface GameSceneProps {
   projectiles: Map<string, any>;
   localPlayerIdentity: Identity | null;
   onPlayerRotation?: (rotation: THREE.Euler) => void;
+  onHandPositionUpdate?: (position: THREE.Vector3) => void;
+  onSpawnProjectile?: () => void;
   currentInputRef?: React.MutableRefObject<any>;
   isDebugPanelVisible?: boolean;
 }
@@ -108,6 +110,8 @@ export const GameScene: React.FC<GameSceneProps> = ({
   projectiles,
   localPlayerIdentity,
   onPlayerRotation,
+  onHandPositionUpdate,
+  onSpawnProjectile,
   currentInputRef,
   isDebugPanelVisible = false
 }) => {
@@ -182,6 +186,8 @@ export const GameScene: React.FC<GameSceneProps> = ({
             playerData={player}
             isLocalPlayer={isLocal}
             onRotationChange={isLocal ? onPlayerRotation : undefined}
+            onHandPositionUpdate={isLocal ? onHandPositionUpdate : undefined}
+            onSpawnProjectile={isLocal ? onSpawnProjectile : undefined}
             currentInput={isLocal ? currentInputRef?.current : undefined}
             isDebugArrowVisible={isLocal ? isDebugPanelVisible : false}
             isDebugPanelVisible={isDebugPanelVisible}
