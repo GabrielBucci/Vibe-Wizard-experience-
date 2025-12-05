@@ -41,6 +41,9 @@ export default __t.object("PlayerData", {
   get forwardVector() {
     return Vector3;
   },
+  alive: __t.bool(),
+  hitRadius: __t.f32(),
+  respawnTime: __t.option(__t.timestamp()),
 });
 
 

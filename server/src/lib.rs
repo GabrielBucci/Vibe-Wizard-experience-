@@ -81,6 +81,9 @@ pub struct PlayerData {
     color: String,
     vertical_velocity: f32,
     forward_vector: Vector3,
+    alive: bool,
+    hit_radius: f32,
+    respawn_time: Option<Timestamp>,
 }
 
 #[spacetimedb::table(name = logged_out_player)]
@@ -218,6 +221,9 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             color: assigned_color,
             vertical_velocity: 0.0,
             forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
+            alive: true,
+            hit_radius: 0.8,
+            respawn_time: None,
         };
         ctx.db.player().insert(rejoining_player);
         ctx.db.logged_out_player().identity().delete(player_identity);
@@ -248,6 +254,9 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             color: assigned_color,
             vertical_velocity: 0.0,
             forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
+            alive: true,
+            hit_radius: 0.8,
+            respawn_time: None,
         });
     }
 }
@@ -326,14 +335,30 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
 
         // Collision Detection (Simple distance check against all players)
         let mut hit = false;
-        for player in ctx.db.player().iter() {
-            if player.identity != projectile.owner_identity {
-                // Check distance
+        for mut player in ctx.db.player().iter() {
+            // Skip if same player or player is dead
+            if player.identity != projectile.owner_identity && player.alive {
+                // Check distance using player's hit_radius
                 let dist = (player.position - next_pos).length();
-                if dist < (PLAYER_RADIUS + PROJECTILE_RADIUS) { // Hit radius
+                if dist < (player.hit_radius + PROJECTILE_RADIUS) {
                     hit = true;
                     spacetimedb::log::info!("Projectile hit player: {}", player.username);
-                    // TODO: Deal damage
+                    
+                    // Apply damage
+                    player.health -= projectile.damage;
+                    if player.health < 0 {
+                        player.health = 0;
+                    }
+                    
+                    // Handle death
+                    if player.health <= 0 {
+                        player.alive = false;
+                        player.respawn_time = None; // TODO: Implement respawn timer
+                        spacetimedb::log::info!("Player {} died!", player.username);
+                    }
+                    
+                    // Update player in database
+                    ctx.db.player().identity().update(player);
                     break;
                 }
             }

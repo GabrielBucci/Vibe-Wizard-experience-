@@ -41,4 +41,7 @@ export default __t.row({
   get forwardVector() {
     return Vector3;
   },
+  alive: __t.bool(),
+  hitRadius: __t.f32(),
+  respawnTime: __t.option(__t.timestamp()),
 });
