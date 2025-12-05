@@ -270,16 +270,18 @@ pub fn update_player_input(
     client_animation: String,
 ) {
     if let Some(mut player) = ctx.db.player().identity().find(ctx.sender) {
-        // store latest yaw (so server movement uses freshest yaw)
+        // Handle jump trigger (rising edge)
+        if input.jump && !player.input.jump && player.position.y <= 0.01 {
+            player.vertical_velocity = 9.0; // JUMP_FORCE
+        }
+
         player.rotation.y = client_yaw;
-
-        // store and normalize forward vector from client
         player.forward_vector = forward_vector.normalize();
+        player.input = input.clone();
+        player.last_input_seq = input.sequence;
+        player.current_animation = client_animation;
 
-        // update state (server authoritative)
-        player_logic::update_input_state(&mut player, input, client_animation);
-
-        // persist
+        // NO position calculation here anymore!
         ctx.db.player().identity().update(player);
     } else {
         spacetimedb::log::warn!("Player {} tried to update input but is not active.", ctx.sender);
@@ -322,11 +324,62 @@ pub fn spawn_projectile(ctx: &ReducerContext, hand_position: Vector3) {
 
 #[spacetimedb::reducer(update)]
 pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
-    // Just use a simple log message without timestamp conversion
     let delta_time: f32 = 0.050; // 50ms tick rate
     
-    // Update Players
-    player_logic::update_players_logic(ctx, delta_time as f64);
+    // --- Player Movement Simulation ---
+    for mut player in ctx.db.player().iter().filter(|p| p.alive) {
+        let yaw = player.rotation.y;
+        let input = &player.input;
+
+        // === RE-IMPLEMENT MOVEMENT HERE (DO NOT CALL calculate_new_position) ===
+        let speed = if input.sprint { 15.0 * 1.8 } else { 15.0 };
+        let cos_y = yaw.cos();
+        let sin_y = yaw.sin();
+
+        let forward = Vector3 { x: -sin_y, y: 0.0, z: -cos_y };
+        let right   = Vector3 { x:  cos_y, y: 0.0, z: -sin_y };
+
+        let mut dir = Vector3::default();
+        if input.forward  { dir = dir + forward; }
+        if input.backward { dir = dir - forward; }
+        if input.right    { dir = dir + right; }
+        if input.left     { dir = dir - right; }
+
+        let horiz_len = (dir.x*dir.x + dir.z*dir.z).sqrt();
+        if horiz_len > 0.01 {
+            dir.x /= horiz_len;
+            dir.z /= horiz_len;
+        }
+
+        let mut new_pos = player.position;
+        new_pos.x += dir.x * speed * delta_time;
+        new_pos.z += dir.z * speed * delta_time;
+
+        // === VERTICAL PHYSICS (CRITICAL: this must run every tick) ===
+        player.vertical_velocity += -6.0 * delta_time; // GRAVITY
+
+        // Jump (rising edge)
+        if input.jump && player.position.y <= 0.01 {
+            player.vertical_velocity = 9.0; // JUMP_FORCE
+        }
+
+        new_pos.y += player.vertical_velocity * delta_time;
+
+        if new_pos.y <= 0.0 {
+            new_pos.y = 0.0;
+            player.vertical_velocity = 0.0;
+        }
+
+        // === APPLY TO PLAYER ===
+        player.position = new_pos;
+
+        // Reset one-shot inputs
+        player.input.attack = false;
+        player.input.cast_spell = false;
+        player.input.jump = false; // ← VERY IMPORTANT: clear jump so it doesn't repeat
+
+        ctx.db.player().identity().update(player);
+    }
 
     // --- Projectile Logic ---
     for mut projectile in ctx.db.projectile().iter() {
@@ -383,20 +436,26 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
                 player.alive = true;
                 player.health = player.max_health;
                 player.vertical_velocity = 0.0;
+                player.input.jump = false;
 
-                // Assign spawn position dynamically based on alive player count
-                let alive_count = ctx.db.player().iter().filter(|p| p.alive).count();
-                let spawn_offset_x = (alive_count as f32 * 5.0) - 2.5;
+                // Deterministic spawn positions
+                let mut identities: Vec<Identity> = ctx.db.player()
+                    .iter()
+                    .map(|p| p.identity)
+                    .collect();
+                identities.sort();
+
+                let index = identities.iter()
+                    .position(|&id| id == player.identity)
+                    .unwrap_or(0);
+
                 player.position = Vector3 {
-                    x: spawn_offset_x,
+                    x: (index as f32 * 5.0) - (identities.len() as f32 * 2.5),
                     y: 1.0,
                     z: 0.0,
                 };
 
-                // Reset rotation to default forward
-                player.rotation = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
-                
-                // Ensure forward_vector matches rotation (facing -Z)
+                player.rotation.y = 0.0;
                 player.forward_vector = Vector3 { x: 0.0, y: 0.0, z: -1.0 };
 
                 spacetimedb::log::info!("Player {} respawned at {:?}", player.username, player.position);

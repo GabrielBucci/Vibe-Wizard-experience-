@@ -31,6 +31,12 @@ pub struct Vector3 {
     pub z: f32,
 }
 
+impl Default for Vector3 {
+    fn default() -> Self {
+        Self { x: 0.0, y: 0.0, z: 0.0 }
+    }
+}
+
 impl Vector3 {
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
@@ -106,7 +112,7 @@ pub const JUMP_FORCE: f32 = 9.0;
 
 // --- Projectile Constants ---
 pub const PROJECTILE_SPEED: f32 = 15.0;
-pub const PROJECTILE_DAMAGE: i32 = 10;
+pub const PROJECTILE_DAMAGE: i32 = 50;
 pub const PROJECTILE_LIFETIME: f32 = 5.0; // seconds
 pub const PROJECTILE_RADIUS: f32 = 0.2;
 pub const PLAYER_RADIUS: f32 = 0.5;

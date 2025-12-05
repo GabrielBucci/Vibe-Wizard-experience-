@@ -115,7 +115,8 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   isLocalPlayer,
   onRotationChange,
   onHandPositionUpdate,
-  onSpawnProjectile,  onForwardVectorUpdate,
+  onSpawnProjectile,
+  onForwardVectorUpdate,
 
   currentInput, // Receive input state
   isDebugArrowVisible = false,
@@ -1014,6 +1015,14 @@ const PlayerComponent: React.FC<PlayerProps> = ({
     };
   }, [isLocalPlayer, toggleCameraMode]);
 
+  // Snap rotation immediately for remote players to prevent facing desync
+  useEffect(() => {
+    if (playerData && !isLocalPlayer && group.current) {
+      const yRotation = playerData.rotation?.y ?? 0;
+      group.current.rotation.set(0, yRotation, 0);
+    }
+  }, [playerData?.rotation?.y, isLocalPlayer]);
+
   // Update camera position in useFrame
   useFrame((state, delta) => {
     const dt = Math.min(delta, 1 / 30); // clamp to avoid huge jumps from tab-swap
@@ -1054,7 +1063,7 @@ const PlayerComponent: React.FC<PlayerProps> = ({
         forward.applyQuaternion(quaternion);
         forward.normalize();
         forwardVectorRef.current.copy(forward);
-        
+
         if (onForwardVectorUpdate) {
           onForwardVectorUpdate(forward);
         }
@@ -1109,7 +1118,10 @@ const PlayerComponent: React.FC<PlayerProps> = ({
       if (isServerDataFresh) {
         const distError = localPositionRef.current.distanceTo(serverPos);
 
-        if (distError > POSITION_RECONCILE_THRESHOLD) {
+        if (distError > 2.0) {
+          // TELEPORT SNAP: If error is huge (respawn), snap immediately
+          localPositionRef.current.copy(serverPos);
+        } else if (distError > POSITION_RECONCILE_THRESHOLD) {
           // big error: lerp more aggressively to server position but keep some smoothing
           localPositionRef.current.lerp(serverPos, RECONCILE_LERP_FACTOR);
         } else {
@@ -1118,9 +1130,8 @@ const PlayerComponent: React.FC<PlayerProps> = ({
         }
       } else {
         // Server data is stale - trust client prediction completely
-        // This prevents snapping back to old positions during lag spikes
         if (frameCounter.current % 60 === 0) {
-          // console.warn(`[Reconciliation] Skipping due to stale data (${timeSinceLastUpdate.toFixed(0)}ms old)`);
+          // console.warn(`[Reconciliation] Skipping due to stale data`);
         }
       }
 

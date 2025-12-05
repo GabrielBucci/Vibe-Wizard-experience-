@@ -39,72 +39,73 @@ use crate::common::{Vector3, InputState, PLAYER_SPEED, SPRINT_MULTIPLIER, GRAVIT
 use crate::PlayerData;
 
 // Fortnite-style movement calculation using yaw only, with vertical velocity in PlayerData
-pub fn calculate_new_position(
-    player: &mut PlayerData,
-    yaw: f32,
-    input: &InputState,
-    delta_time: f32,
-    prev_jump: bool
-) -> Vector3 {
-    // If nothing to do and grounded, fast-exit
-    let has_movement_input = input.forward || input.backward || input.left || input.right;
-    if !has_movement_input && !input.jump && player.position.y <= 0.0 {
-        return player.position.clone();
-    }
-
-    // speed
-    let speed = if input.sprint { PLAYER_SPEED * SPRINT_MULTIPLIER } else { PLAYER_SPEED };
-
-    // Build forward/right from yaw (convention: forward is -z)
-    let cos_yaw = yaw.cos();
-    let sin_yaw = yaw.sin();
-
-    let forward = Vector3 { x: -sin_yaw, y: 0.0, z: -cos_yaw };
-    let right   = Vector3 { x:  cos_yaw, y: 0.0, z: -sin_yaw };
-
-    // accumulate horizontal movement vector
-    let mut dir = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
-    if input.forward  { dir.x += forward.x; dir.z += forward.z; }
-    if input.backward { dir.x -= forward.x; dir.z -= forward.z; }
-    if input.right    { dir.x += right.x;   dir.z += right.z;   }
-    if input.left     { dir.x -= right.x;   dir.z -= right.z;   }
-
-    // normalize horizontal component
-    let mag = (dir.x * dir.x + dir.z * dir.z).sqrt();
-    if mag > 0.01 {
-        dir.x /= mag;
-        dir.z /= mag;
-    }
-
-    // scale by speed and delta
-    dir.x *= speed * delta_time;
-    dir.z *= speed * delta_time;
-
-    // apply horizontal movement to position
-    let mut new_pos = player.position.clone();
-    new_pos.x += dir.x;
-    new_pos.z += dir.z;
-
-    // --- Vertical movement: gravity & jump ---
-    // player.vertical_velocity is stored in PlayerData
-    player.vertical_velocity += GRAVITY * delta_time;
-
-    // Jump impulse (rising edge: input.jump true now, but prev_jump false)
-    if input.jump && !prev_jump && player.position.y <= 0.01 {
-        player.vertical_velocity = JUMP_FORCE;
-    }
-
-    // Apply vertical velocity
-    new_pos.y += player.vertical_velocity * delta_time;
-
-    // Ground collision and clamp
-    if new_pos.y <= 0.0 {
-        new_pos.y = 0.0;
-        player.vertical_velocity = 0.0;
-    }
-
-    new_pos
-}
+// MOVED TO GAME_TICK IN LIB.RS
+// pub fn calculate_new_position(
+//     player: &mut PlayerData,
+//     yaw: f32,
+//     input: &InputState,
+//     delta_time: f32,
+//     prev_jump: bool
+// ) -> Vector3 {
+//     // If nothing to do and grounded, fast-exit
+//     let has_movement_input = input.forward || input.backward || input.left || input.right;
+//     if !has_movement_input && !input.jump && player.position.y <= 0.0 {
+//         return player.position.clone();
+//     }
+// 
+//     // speed
+//     let speed = if input.sprint { PLAYER_SPEED * SPRINT_MULTIPLIER } else { PLAYER_SPEED };
+// 
+//     // Build forward/right from yaw (convention: forward is -z)
+//     let cos_yaw = yaw.cos();
+//     let sin_yaw = yaw.sin();
+// 
+//     let forward = Vector3 { x: -sin_yaw, y: 0.0, z: -cos_yaw };
+//     let right   = Vector3 { x:  cos_yaw, y: 0.0, z: -sin_yaw };
+// 
+//     // accumulate horizontal movement vector
+//     let mut dir = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
+//     if input.forward  { dir.x += forward.x; dir.z += forward.z; }
+//     if input.backward { dir.x -= forward.x; dir.z -= forward.z; }
+//     if input.right    { dir.x += right.x;   dir.z += right.z;   }
+//     if input.left     { dir.x -= right.x;   dir.z -= right.z;   }
+// 
+//     // normalize horizontal component
+//     let mag = (dir.x * dir.x + dir.z * dir.z).sqrt();
+//     if mag > 0.01 {
+//         dir.x /= mag;
+//         dir.z /= mag;
+//     }
+// 
+//     // scale by speed and delta
+//     dir.x *= speed * delta_time;
+//     dir.z *= speed * delta_time;
+// 
+//     // apply horizontal movement to position
+//     let mut new_pos = player.position.clone();
+//     new_pos.x += dir.x;
+//     new_pos.z += dir.z;
+// 
+//     // --- Vertical movement: gravity & jump ---
+//     // player.vertical_velocity is stored in PlayerData
+//     player.vertical_velocity += GRAVITY * delta_time;
+// 
+//     // Jump impulse (rising edge: input.jump true now, but prev_jump false)
+//     if input.jump && !prev_jump && player.position.y <= 0.01 {
+//         player.vertical_velocity = JUMP_FORCE;
+//     }
+// 
+//     // Apply vertical velocity
+//     new_pos.y += player.vertical_velocity * delta_time;
+// 
+//     // Ground collision and clamp
+//     if new_pos.y <= 0.0 {
+//         new_pos.y = 0.0;
+//         player.vertical_velocity = 0.0;
+//     }
+// 
+//     new_pos
+// }
 
 // Note: Animation determination is currently handled client-side
 // You could implement server-side animation logic here if needed
@@ -136,13 +137,17 @@ pub fn update_input_state(player: &mut PlayerData, input: InputState, client_ani
     let old_position = player.position.clone();
 
     // Compute new authoritative position
-    let new_position = calculate_new_position(
-        player,
-        yaw,
-        &input,
-        delta_time_estimate,
-        prev_jump
-    );
+    // MOVED TO GAME_TICK IN LIB.RS
+    // let new_position = calculate_new_position(
+    //     player,
+    //     yaw,
+    //     &input,
+    //     delta_time_estimate,
+    //     prev_jump
+    // );
+    
+    // For now, just keep old position to avoid errors
+    let new_position = player.position.clone();
 
     // Calculate position delta for movement detection
     let position_delta = ((new_position.x - old_position.x).powi(2) + 
