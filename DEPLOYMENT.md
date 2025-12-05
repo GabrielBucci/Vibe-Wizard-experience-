@@ -66,30 +66,6 @@ Follow the prompts:
 1. Push your code to GitHub
 2. Go to [Vercel Dashboard](https://vercel.com/dashboard)
 3. Click "Add New..." → "Project"
-4. Import your GitHub repository
-5. Set **Root Directory** to `client`
-6. Click "Deploy"
-
-### Configure Environment Variables
-
-In the Vercel dashboard for your project:
-
-1. Go to **Settings** → **Environment Variables**
-2. Add the following variables:
-
-| Name | Value | Environment |
-|------|-------|-------------|
-| `VITE_SPACETIME_HOST` | `maincloud.spacetimedb.com` | Production |
-| `VITE_SPACETIME_MODULE_NAME` | `vibe-multiplayer` | Production |
-
-3. Click "Save"
-4. Redeploy the project for changes to take effect
-
-## Step 3: Test Production Deployment
-
-1. Visit your Vercel deployment URL
-2. Open browser console to verify connection logs
-3. Register a player and test movement
 4. Open in multiple browser windows/devices to test multiplayer
 
 ## Local Development
