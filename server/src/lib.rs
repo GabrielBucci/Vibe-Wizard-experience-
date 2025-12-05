@@ -83,7 +83,7 @@ pub struct PlayerData {
     forward_vector: Vector3,
     alive: bool,
     hit_radius: f32,
-    respawn_time: Option<Timestamp>,
+    respawn_ticks_remaining: i32,
 }
 
 #[spacetimedb::table(name = logged_out_player)]
@@ -223,7 +223,7 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
             alive: true,
             hit_radius: 0.8,
-            respawn_time: None,
+            respawn_ticks_remaining: 0,
         };
         ctx.db.player().insert(rejoining_player);
         ctx.db.logged_out_player().identity().delete(player_identity);
@@ -256,7 +256,7 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
             alive: true,
             hit_radius: 0.8,
-            respawn_time: None,
+            respawn_ticks_remaining: 0,
         });
     }
 }
@@ -350,14 +350,11 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
                         player.health = 0;
                     }
                     
-                    // Handle death - instant respawn
+                    // Handle death - delayed respawn (3 seconds = 60 ticks at 50ms)
                     if player.health <= 0 {
-                        spacetimedb::log::info!("Player {} died! Respawning...", player.username);
-                        // Reset health
-                        player.health = player.max_health;
-                        // Respawn at origin
-                        player.position = Vector3 { x: 0.0, y: 1.0, z: 0.0 };
-                        // Keep alive = true (no death state)
+                        player.alive = false;
+                        player.respawn_ticks_remaining = 60; // 3 seconds
+                        spacetimedb::log::info!("Player {} died! Respawning in 3 seconds...", player.username);
                     }
                     
                     // Update player in database
@@ -373,6 +370,39 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
             // Update position
             projectile.position = next_pos;
             ctx.db.projectile().id().update(projectile);
+        }
+    }
+    
+    // --- Respawn Logic ---
+    for mut player in ctx.db.player().iter() {
+        if !player.alive && player.respawn_ticks_remaining > 0 {
+            player.respawn_ticks_remaining -= 1;
+            
+            // Respawn when timer reaches 0
+            if player.respawn_ticks_remaining <= 0 {
+                player.alive = true;
+                player.health = player.max_health;
+                player.vertical_velocity = 0.0;
+
+                // Assign spawn position dynamically based on alive player count
+                let alive_count = ctx.db.player().iter().filter(|p| p.alive).count();
+                let spawn_offset_x = (alive_count as f32 * 5.0) - 2.5;
+                player.position = Vector3 {
+                    x: spawn_offset_x,
+                    y: 1.0,
+                    z: 0.0,
+                };
+
+                // Reset rotation to default forward
+                player.rotation = Vector3 { x: 0.0, y: 0.0, z: 0.0 };
+                
+                // Ensure forward_vector matches rotation (facing -Z)
+                player.forward_vector = Vector3 { x: 0.0, y: 0.0, z: -1.0 };
+
+                spacetimedb::log::info!("Player {} respawned at {:?}", player.username, player.position);
+            }
+            
+            ctx.db.player().identity().update(player);
         }
     }
     

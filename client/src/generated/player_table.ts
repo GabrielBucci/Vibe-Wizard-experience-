@@ -43,5 +43,5 @@ export default __t.row({
   },
   alive: __t.bool(),
   hitRadius: __t.f32(),
-  respawnTime: __t.option(__t.timestamp()),
+  respawnTicksRemaining: __t.i32(),
 });
