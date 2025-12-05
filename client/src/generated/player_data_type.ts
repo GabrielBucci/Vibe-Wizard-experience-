@@ -38,6 +38,9 @@ export default __t.object("PlayerData", {
   },
   color: __t.string(),
   verticalVelocity: __t.f32(),
+  get forwardVector() {
+    return Vector3;
+  },
 });
 
 

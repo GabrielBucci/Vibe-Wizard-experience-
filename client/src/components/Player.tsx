@@ -104,6 +104,7 @@ interface PlayerProps {
   onRotationChange?: (rotation: THREE.Euler) => void;
   onHandPositionUpdate?: (position: THREE.Vector3) => void;
   onSpawnProjectile?: () => void;
+  onForwardVectorUpdate?: (forward: THREE.Vector3) => void;
   currentInput?: any; // Prop to receive current input for local player
   isDebugArrowVisible?: boolean; // Prop to control debug arrow visibility
   isDebugPanelVisible?: boolean; // Prop to control general debug helpers visibility
@@ -114,7 +115,8 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   isLocalPlayer,
   onRotationChange,
   onHandPositionUpdate,
-  onSpawnProjectile,
+  onSpawnProjectile,  onForwardVectorUpdate,
+
   currentInput, // Receive input state
   isDebugArrowVisible = false,
   isDebugPanelVisible = false // Destructure with default false
@@ -138,6 +140,7 @@ const PlayerComponent: React.FC<PlayerProps> = ({
   const handBoneRef = useRef<THREE.Bone | null>(null);
   const projectileFiredRef = useRef(false);
   const lastAnimationRef = useRef<string>(ANIMATIONS.IDLE);
+  const forwardVectorRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, -1));
 
   // Camera control variables
   const isPointerLocked = useRef(false);
@@ -1042,6 +1045,19 @@ const PlayerComponent: React.FC<PlayerProps> = ({
         const handPos = new THREE.Vector3();
         handBoneRef.current.getWorldPosition(handPos);
         onHandPositionUpdate(handPos);
+
+        // Calculate forward direction from camera rotation (mouse aim)
+        // This uses the player's yaw and pitch from mouse movement
+        const forward = new THREE.Vector3(0, 0, -1);
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromEuler(localRotationRef.current);
+        forward.applyQuaternion(quaternion);
+        forward.normalize();
+        forwardVectorRef.current.copy(forward);
+        
+        if (onForwardVectorUpdate) {
+          onForwardVectorUpdate(forward);
+        }
 
         // Check animation timing for projectile spawn
         if (mixer && onSpawnProjectile) {

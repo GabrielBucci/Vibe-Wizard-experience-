@@ -80,6 +80,7 @@ pub struct PlayerData {
     input: InputState,
     color: String,
     vertical_velocity: f32,
+    forward_vector: Vector3,
 }
 
 #[spacetimedb::table(name = logged_out_player)]
@@ -216,6 +217,7 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             input: default_input,
             color: assigned_color,
             vertical_velocity: 0.0,
+            forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
         };
         ctx.db.player().insert(rejoining_player);
         ctx.db.logged_out_player().identity().delete(player_identity);
@@ -245,6 +247,7 @@ pub fn register_player(ctx: &ReducerContext, username: String, character_class: 
             input: default_input,
             color: assigned_color,
             vertical_velocity: 0.0,
+            forward_vector: Vector3 { x: 0.0, y: 0.0, z: -1.0 },
         });
     }
 }
@@ -254,11 +257,15 @@ pub fn update_player_input(
     ctx: &ReducerContext,
     input: InputState,
     client_yaw: f32,
+    forward_vector: Vector3,
     client_animation: String,
 ) {
     if let Some(mut player) = ctx.db.player().identity().find(ctx.sender) {
         // store latest yaw (so server movement uses freshest yaw)
         player.rotation.y = client_yaw;
+
+        // store and normalize forward vector from client
+        player.forward_vector = forward_vector.normalize();
 
         // update state (server authoritative)
         player_logic::update_input_state(&mut player, input, client_animation);
@@ -283,23 +290,13 @@ pub fn spawn_projectile(ctx: &ReducerContext, hand_position: Vector3) {
         return;
     };
 
-    // 2️⃣ Extract yaw
-    let yaw = player.rotation.y;
+    // 2️⃣ Use stored forward vector from client (already normalized)
+    let direction_normalized = player.forward_vector;
 
-    // 3️⃣ Compute forward vector from yaw (horizontal plane)
-    let forward = Vector3 {
-        x: yaw.sin(),   // Horizontal X
-        y: 0.0,         // No vertical component
-        z: yaw.cos(),   // Horizontal Z
-    };
-
-    // 4️⃣ Use hand position as spawn position
+    // 3️⃣ Use hand position as spawn position
     let spawn_pos = hand_position;
 
-    // 5️⃣ Use forward vector as direction
-    let direction_normalized = forward;
-
-    // 6️⃣ Insert projectile into database
+    // 4️⃣ Insert projectile into database
     ctx.db.projectile().insert(ProjectileData {
         id: 0, // auto_inc
         owner_identity,

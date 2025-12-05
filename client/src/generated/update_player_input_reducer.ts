@@ -10,6 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+import Vector3 from "./vector_3_type";
 import InputState from "./input_state_type";
 
 export default {
@@ -17,5 +18,8 @@ export default {
     return InputState;
   },
   clientYaw: __t.f32(),
+  get forwardVector() {
+    return Vector3;
+  },
   clientAnimation: __t.string(),
 };

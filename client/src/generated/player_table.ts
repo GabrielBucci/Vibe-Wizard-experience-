@@ -38,4 +38,7 @@ export default __t.row({
   },
   color: __t.string(),
   verticalVelocity: __t.f32(),
+  get forwardVector() {
+    return Vector3;
+  },
 });

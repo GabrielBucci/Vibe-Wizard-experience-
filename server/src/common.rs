@@ -35,6 +35,19 @@ impl Vector3 {
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
+
+    pub fn normalize(&self) -> Vector3 {
+        let len = self.length();
+        if len > 0.0 {
+            Vector3 {
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
+            }
+        } else {
+            *self
+        }
+    }
 }
 
 impl std::ops::Add for Vector3 {

@@ -100,6 +100,7 @@ function App() {
   // New import for handling player rotation data
   const playerRotationRef = useRef<THREE.Euler>(new THREE.Euler(0, 0, 0, 'YXZ'));
   const handPositionRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
+  const forwardVectorRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, -1));
 
   // --- Moved Table Callbacks/Subscription Functions Up ---
   const registerTableCallbacks = useCallback(() => {
@@ -346,6 +347,11 @@ function App() {
       conn.reducers.updatePlayerInput({
         input: safeInputState,
         clientYaw: yawToSend,
+        forwardVector: {
+          x: forwardVectorRef.current.x,
+          y: forwardVectorRef.current.y,
+          z: forwardVectorRef.current.z
+        },
         clientAnimation: currentAnimation
       });
       lastSentInputState.current = { ...safeInputState };
@@ -372,6 +378,12 @@ function App() {
     } else {
       console.warn("[DEBUG] Cannot spawn projectile: conn missing or handPositionRef invalid", { conn: !!conn, handPos: handPositionRef.current });
     }
+  }, []);
+
+  
+
+  const handleForwardVectorUpdate = useCallback((forward: THREE.Vector3) => {
+    forwardVectorRef.current.copy(forward);
   }, []);
 
   const handlePlayerRotation = useCallback((rotation: THREE.Euler) => {
@@ -601,6 +613,7 @@ function App() {
             onPlayerRotation={handlePlayerRotation}
             onHandPositionUpdate={handleHandPositionUpdate}
             onSpawnProjectile={handleSpawnProjectile}
+            onForwardVectorUpdate={handleForwardVectorUpdate}
             currentInputRef={currentInputRef}
             isDebugPanelVisible={isDebugPanelExpanded}
           />
