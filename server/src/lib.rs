@@ -350,11 +350,14 @@ pub fn game_tick(ctx: &ReducerContext, _tick_info: GameTickSchedule) {
                         player.health = 0;
                     }
                     
-                    // Handle death
+                    // Handle death - instant respawn
                     if player.health <= 0 {
-                        player.alive = false;
-                        player.respawn_time = None; // TODO: Implement respawn timer
-                        spacetimedb::log::info!("Player {} died!", player.username);
+                        spacetimedb::log::info!("Player {} died! Respawning...", player.username);
+                        // Reset health
+                        player.health = player.max_health;
+                        // Respawn at origin
+                        player.position = Vector3 { x: 0.0, y: 1.0, z: 0.0 };
+                        // Keep alive = true (no death state)
                     }
                     
                     // Update player in database
